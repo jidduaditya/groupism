@@ -18,15 +18,18 @@ app.get('/health', (_req, res) => {
 });
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
-  .split(',')
-  .map(s => s.trim());
+const allowedOrigins = [
+  'https://groupism-p9g9.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:8080',
+  ...(process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean),
+];
 
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: ${origin} not allowed`));
+    cb(null, false);
   },
   credentials: true,
 }));
