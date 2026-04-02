@@ -53,7 +53,7 @@ app.use((_req, res) => {
 
 // ─── Error handler ───────────────────────────────────────────────────────────
 app.use((err: any, _req: any, res: any, _next: any) => {
-  console.error('Unhandled error:', err.message);
+  console.error('Unhandled error:', err.stack || err.message);
   res.status(500).json({ error: 'Internal server error' });
 });
 

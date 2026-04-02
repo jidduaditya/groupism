@@ -7,95 +7,104 @@ const router = Router();
 
 // POST /api/trips — create a new trip
 router.post('/', async (req, res) => {
-  const {
-    name,
-    budget_min,
-    budget_max,
-    travel_from,
-    travel_to,
-    deadline,
-    organiser_name,
-  } = req.body;
+  try {
+    const {
+      name,
+      budget_min,
+      budget_max,
+      travel_from,
+      travel_to,
+      deadline,
+      organiser_name,
+    } = req.body;
 
-  if (!name || !organiser_name) {
-    return res.status(400).json({ error: 'name and organiser_name are required' });
-  }
-  if (name.length > 100) {
-    return res.status(400).json({ error: 'Trip name must be 100 characters or fewer' });
-  }
-  if (organiser_name.length > 50) {
-    return res.status(400).json({ error: 'Organiser name must be 50 characters or fewer' });
-  }
-  if (budget_min != null && budget_max != null && Number(budget_min) > Number(budget_max)) {
-    return res.status(400).json({ error: 'budget_min must be less than or equal to budget_max' });
-  }
-  if (travel_from && travel_to && travel_from > travel_to) {
-    return res.status(400).json({ error: 'travel_from must be before or equal to travel_to' });
-  }
+    if (!name || !organiser_name) {
+      return res.status(400).json({ error: 'name and organiser_name are required' });
+    }
+    if (name.length > 100) {
+      return res.status(400).json({ error: 'Trip name must be 100 characters or fewer' });
+    }
+    if (organiser_name.length > 50) {
+      return res.status(400).json({ error: 'Organiser name must be 50 characters or fewer' });
+    }
+    if (budget_min != null && budget_max != null && Number(budget_min) > Number(budget_max)) {
+      return res.status(400).json({ error: 'budget_min must be less than or equal to budget_max' });
+    }
+    if (travel_from && travel_to && travel_from > travel_to) {
+      return res.status(400).json({ error: 'travel_from must be before or equal to travel_to' });
+    }
 
-  const organiser_token = generateOrganiserToken();
-  const member_token    = generateMemberToken();
-  let   join_token      = generateJoinToken(name);
+    const organiser_token = generateOrganiserToken();
+    const member_token    = generateMemberToken();
+    let   join_token      = generateJoinToken(name);
 
-  // Build insert payload — only include optional fields when provided
-  const tripData: Record<string, any> = { name, join_token, organiser_token };
-  if (budget_min  != null) tripData.budget_min  = budget_min;
-  if (budget_max  != null) tripData.budget_max  = budget_max;
-  if (travel_from)         tripData.travel_from = travel_from;
-  if (travel_to)           tripData.travel_to   = travel_to;
-  if (deadline)            tripData.deadline    = deadline;
+    // Build insert payload — only include optional fields when provided
+    const tripData: Record<string, any> = { name, join_token, organiser_token };
+    if (budget_min  != null) tripData.budget_min  = budget_min;
+    if (budget_max  != null) tripData.budget_max  = budget_max;
+    if (travel_from)         tripData.travel_from = travel_from;
+    if (travel_to)           tripData.travel_to   = travel_to;
+    if (deadline)            tripData.deadline    = deadline;
 
-  // Retry once on join_token collision (extremely rare but possible)
-  const { data: trip, error } = await supabase
-    .from('trips')
-    .insert(tripData)
-    .select()
-    .single();
-
-  if (error?.code === '23505') {
-    join_token = generateJoinToken(name);
-    tripData.join_token = join_token;
-    const retry = await supabase
+    // Retry once on join_token collision (extremely rare but possible)
+    const { data: trip, error } = await supabase
       .from('trips')
       .insert(tripData)
       .select()
       .single();
 
-    if (retry.error) return res.status(500).json({ error: 'Failed to create trip' });
+    if (error?.code === '23505') {
+      join_token = generateJoinToken(name);
+      tripData.join_token = join_token;
+      const retry = await supabase
+        .from('trips')
+        .insert(tripData)
+        .select()
+        .single();
 
-    const { data: member } = await supabase
+      if (retry.error) return res.status(500).json({ error: 'Failed to create trip', detail: retry.error.message });
+
+      const { data: member, error: memberErr } = await supabase
+        .from('trip_members')
+        .insert({ trip_id: retry.data.id, display_name: organiser_name, member_token, is_organiser: true })
+        .select()
+        .single();
+
+      if (memberErr) return res.status(500).json({ error: 'Failed to register organiser', detail: memberErr.message });
+
+      return res.status(201).json({
+        trip_id:         retry.data.id,
+        join_token:      retry.data.join_token,
+        join_url:        `${process.env.FRONTEND_URL}/join/${retry.data.join_token}`,
+        organiser_token,
+        member_token,
+        member_id:       member?.id,
+      });
+    }
+
+    if (error) return res.status(500).json({ error: 'Failed to create trip', detail: error.message });
+    if (!trip) return res.status(500).json({ error: 'Failed to create trip', detail: 'No data returned' });
+
+    // Register organiser as first member
+    const { data: member, error: memberErr } = await supabase
       .from('trip_members')
-      .insert({ trip_id: retry.data.id, display_name: organiser_name, member_token, is_organiser: true })
+      .insert({ trip_id: trip.id, display_name: organiser_name, member_token, is_organiser: true })
       .select()
       .single();
 
-    return res.status(201).json({
-      trip_id:         retry.data.id,
-      join_token:      retry.data.join_token,
-      join_url:        `${process.env.FRONTEND_URL}/join/${retry.data.join_token}`,
+    if (memberErr) return res.status(500).json({ error: 'Failed to register organiser', detail: memberErr.message });
+
+    res.status(201).json({
+      trip_id:         trip.id,
+      join_token:      trip.join_token,
+      join_url:        `${process.env.FRONTEND_URL}/join/${trip.join_token}`,
       organiser_token,
       member_token,
       member_id:       member?.id,
     });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Trip creation failed', detail: err.message });
   }
-
-  if (error || !trip) return res.status(500).json({ error: 'Failed to create trip' });
-
-  // Register organiser as first member
-  const { data: member } = await supabase
-    .from('trip_members')
-    .insert({ trip_id: trip.id, display_name: organiser_name, member_token, is_organiser: true })
-    .select()
-    .single();
-
-  res.status(201).json({
-    trip_id:         trip.id,
-    join_token:      trip.join_token,
-    join_url:        `${process.env.FRONTEND_URL}/join/${trip.join_token}`,
-    organiser_token,
-    member_token,
-    member_id:       member?.id,
-  });
 });
 
 // PATCH /api/trips/:joinToken — organiser updates trip details (budget, dates, deadline)
