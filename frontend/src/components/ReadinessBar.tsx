@@ -19,9 +19,9 @@ const ReadinessBar = ({ members }: ReadinessBarProps) => {
             key={i}
             className={cn(
               "font-ui text-sm transition-all",
-              member.status === "confirmed"
-                ? "text-t-primary border-b border-amber pb-0.5"
-                : "text-t-primary opacity-[0.35]"
+              member.status === "confirmed" && "text-t-primary border-b border-amber pb-0.5",
+              member.status === "voted" && "text-t-primary border-b border-amber/40 pb-0.5 opacity-60",
+              member.status === "none" && "text-t-primary opacity-[0.35]"
             )}
           >
             {member.name}

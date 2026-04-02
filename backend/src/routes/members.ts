@@ -12,6 +12,12 @@ router.post('/join', loadTrip, async (req, res) => {
   if (!display_name || !member_token) {
     return res.status(400).json({ error: 'display_name and member_token required' });
   }
+  if (typeof display_name !== 'string' || display_name.trim().length === 0) {
+    return res.status(400).json({ error: 'display_name must not be empty' });
+  }
+  if (display_name.length > 50) {
+    return res.status(400).json({ error: 'display_name must be 50 characters or fewer' });
+  }
 
   // Idempotent: if this member_token already exists, return existing record
   const { data: existing } = await supabase

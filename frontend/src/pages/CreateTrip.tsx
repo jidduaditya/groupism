@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import DestinationCard from "@/components/DestinationCard";
+import { api, setTokens } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 
 const budgetPresets = ["₹5K", "₹10K", "₹15K", "₹25K+"];
 
@@ -19,39 +21,25 @@ const loadingMessages = [
   "Writing honest tradeoffs...",
 ];
 
-const mockDestinations = [
-  {
-    name: "Goa",
-    tagline: "Beach energy, good food, iconic India",
-    votes: 0,
-    pros: ["Great for groups of mixed ages", "Flights are reasonable in March"],
-    cons: ["Can get overcrowded on weekends", "Some areas feel tourist-trapped"],
-    bestFor: "mixed friend groups",
-    estCost: "₹8,000 – ₹12,000 pp",
-  },
-  {
-    name: "Pondicherry",
-    tagline: "French Quarter charm, quiet cafés, slower pace",
-    votes: 0,
-    pros: ["Beautiful architecture and vibe", "Great food scene"],
-    cons: ["Beaches aren't great for swimming", "Limited nightlife"],
-    bestFor: "couples and calm groups",
-    estCost: "₹6,000 – ₹10,000 pp",
-  },
-  {
-    name: "Kasol",
-    tagline: "Mountains, trekking, bonfire nights",
-    votes: 0,
-    pros: ["Stunning scenery on budget", "Great for adventure groups"],
-    cons: ["Long travel from most cities", "Weather can be unpredictable"],
-    bestFor: "adventure-seeking friends",
-    estCost: "₹5,000 – ₹9,000 pp",
-  },
-];
+interface Destination {
+  id: string;
+  name: string;
+  tagline: string;
+  votes: number;
+  pros: string[];
+  cons: string[];
+  bestFor: string;
+  estCost: string;
+}
+
+function formatCost(min: number, max: number): string {
+  return `₹${min.toLocaleString("en-IN")} – ₹${max.toLocaleString("en-IN")} pp`;
+}
 
 const CreateTrip = () => {
   const navigate = useNavigate();
   const [tripName, setTripName] = useState("");
+  const [organiserName, setOrganiserName] = useState("");
   const [groupSize, setGroupSize] = useState(6);
   const [budgetMin, setBudgetMin] = useState("");
   const [budgetMax, setBudgetMax] = useState("");
@@ -64,7 +52,10 @@ const CreateTrip = () => {
   const [step2Done, setStep2Done] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
-  const [destinations, setDestinations] = useState<typeof mockDestinations | null>(null);
+  const [destinations, setDestinations] = useState<Destination[] | null>(null);
+
+  // Stored after trip creation so we can call ai-suggest and navigate
+  const [joinToken, setJoinToken] = useState<string | null>(null);
 
   const currentStep = step2Done ? 3 : step1Done ? 2 : 1;
 
@@ -76,16 +67,103 @@ const CreateTrip = () => {
     return () => clearInterval(interval);
   }, [loading]);
 
-  const handleGetSuggestions = () => {
+  // Create the trip first (if not already created), then call AI suggest
+  const handleGetSuggestions = async () => {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      let token = joinToken;
+
+      // Create trip if we haven't yet
+      if (!token) {
+        const trip = await api.post("/api/trips", {
+          name: tripName,
+          organiser_name: organiserName || "Organiser",
+          budget_min: Number(budgetMin) || undefined,
+          budget_max: Number(budgetMax) || undefined,
+          travel_from: dateFrom || undefined,
+          travel_to: dateTo || undefined,
+          deadline: confirmBy || undefined,
+        });
+
+        token = trip.join_token;
+        setJoinToken(token);
+        setTokens(token, {
+          memberToken: trip.member_token,
+          memberId: trip.member_id,
+          organiserToken: trip.organiser_token,
+        });
+      }
+
+      // Call AI suggestions
+      const res = await api.post(
+        `/api/trips/${token}/ai-suggest`,
+        {
+          group_size: groupSize,
+          budget_min: Number(budgetMin) || 5000,
+          budget_max: Number(budgetMax) || 15000,
+          travel_from: dateFrom,
+          travel_to: dateTo,
+          notes,
+        },
+        token
+      );
+
+      const mapped: Destination[] = (res.destinations || []).map((d: any) => ({
+        id: d.id || "",
+        name: d.name,
+        tagline: d.tagline || "",
+        votes: 0,
+        pros: d.pros || [],
+        cons: d.cons || [],
+        bestFor: d.best_for || "",
+        estCost: formatCost(d.estimated_cost_min || 0, d.estimated_cost_max || 0),
+      }));
+
+      setDestinations(mapped);
+    } catch (err: any) {
+      toast({
+        title: "AI suggestions unavailable",
+        description: err.message || "You can still create the trip and add destinations manually.",
+        variant: "destructive",
+      });
+    } finally {
       setLoading(false);
-      setDestinations(mockDestinations);
-    }, 4500);
+    }
   };
 
-  const handleCreateRoom = () => {
-    navigate("/trip/demo-trip-123");
+  const handleCreateRoom = async () => {
+    try {
+      let token = joinToken;
+
+      // Create trip if AI was skipped
+      if (!token) {
+        const trip = await api.post("/api/trips", {
+          name: tripName,
+          organiser_name: organiserName || "Organiser",
+          budget_min: Number(budgetMin) || undefined,
+          budget_max: Number(budgetMax) || undefined,
+          travel_from: dateFrom || undefined,
+          travel_to: dateTo || undefined,
+          deadline: confirmBy || undefined,
+        });
+
+        token = trip.join_token;
+        setJoinToken(token);
+        setTokens(token, {
+          memberToken: trip.member_token,
+          memberId: trip.member_id,
+          organiserToken: trip.organiser_token,
+        });
+      }
+
+      navigate(`/trip/${token}`);
+    } catch (err: any) {
+      toast({
+        title: "Failed to create trip",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -118,6 +196,17 @@ const CreateTrip = () => {
               placeholder="Goa March '26"
               className="w-full text-[20px] md:text-[24px] font-ui font-medium bg-transparent border-b border-b-mid pb-3 text-t-primary placeholder:text-t-tertiary focus:outline-none focus:border-t-secondary transition-colors"
             />
+
+            <div>
+              <label className="eyebrow block mb-3">YOUR NAME</label>
+              <input
+                type="text"
+                value={organiserName}
+                onChange={(e) => setOrganiserName(e.target.value)}
+                placeholder="Aditya"
+                className="w-full text-lg font-ui bg-transparent border-b border-b-mid pb-2 text-t-primary placeholder:text-t-tertiary focus:outline-none focus:border-t-secondary transition-colors"
+              />
+            </div>
 
             <div>
               <label className="eyebrow block mb-4">HOW MANY PEOPLE</label>
@@ -176,7 +265,7 @@ const CreateTrip = () => {
               <Button
                 variant="amber"
                 className="w-full h-11"
-                disabled={!tripName}
+                disabled={!tripName || !organiserName}
                 onClick={() => setStep1Done(true)}
               >
                 Continue
@@ -284,8 +373,8 @@ const CreateTrip = () => {
 
               {destinations && (
                 <div className="divide-y divide-b-subtle">
-                  {destinations.map((d, i) => (
-                    <DestinationCard key={i} {...d} />
+                  {destinations.map((d) => (
+                    <DestinationCard key={d.id || d.name} {...d} />
                   ))}
                 </div>
               )}

@@ -24,6 +24,7 @@ const App = () => (
           <Route path="/create" element={<CreateTrip />} />
           <Route path="/trip/:id" element={<TripRoom />} />
           <Route path="/join/:code" element={<JoinTrip />} />
+          <Route path="/t/:code" element={<JoinTrip />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

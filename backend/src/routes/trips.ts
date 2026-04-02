@@ -20,6 +20,18 @@ router.post('/', async (req, res) => {
   if (!name || !organiser_name) {
     return res.status(400).json({ error: 'name and organiser_name are required' });
   }
+  if (name.length > 100) {
+    return res.status(400).json({ error: 'Trip name must be 100 characters or fewer' });
+  }
+  if (organiser_name.length > 50) {
+    return res.status(400).json({ error: 'Organiser name must be 50 characters or fewer' });
+  }
+  if (budget_min != null && budget_max != null && Number(budget_min) > Number(budget_max)) {
+    return res.status(400).json({ error: 'budget_min must be less than or equal to budget_max' });
+  }
+  if (travel_from && travel_to && travel_from > travel_to) {
+    return res.status(400).json({ error: 'travel_from must be before or equal to travel_to' });
+  }
 
   const organiser_token = generateOrganiserToken();
   const member_token    = generateMemberToken();
@@ -51,7 +63,7 @@ router.post('/', async (req, res) => {
     return res.status(201).json({
       trip_id:         retry.data.id,
       join_token:      retry.data.join_token,
-      join_url:        `${process.env.FRONTEND_URL}/t/${retry.data.join_token}`,
+      join_url:        `${process.env.FRONTEND_URL}/join/${retry.data.join_token}`,
       organiser_token,
       member_token,
       member_id:       member?.id,
@@ -70,7 +82,7 @@ router.post('/', async (req, res) => {
   res.status(201).json({
     trip_id:         trip.id,
     join_token:      trip.join_token,
-    join_url:        `${process.env.FRONTEND_URL}/t/${trip.join_token}`,
+    join_url:        `${process.env.FRONTEND_URL}/join/${trip.join_token}`,
     organiser_token,
     member_token,
     member_id:       member?.id,
@@ -99,10 +111,11 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     .eq('trip_id', trip.id)
     .order('created_at', { ascending: true });
 
-  // Flatten vote counts
+  // Flatten vote counts and expose voter_member_ids
   const destinationsWithVotes = (destinations || []).map((d: any) => ({
     ...d,
     votes: d.destination_votes?.length ?? 0,
+    voter_member_ids: (d.destination_votes || []).map((v: any) => v.member_id),
     destination_votes: undefined,
   }));
 
