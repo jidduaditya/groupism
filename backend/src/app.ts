@@ -9,18 +9,13 @@ import aiRouter           from './routes/ai';
 import budgetRouter       from './routes/budget';
 import availabilityRouter from './routes/availability';
 import deadlinesRouter    from './routes/deadlines';
+import couplesRouter      from './routes/couples';
 
 const app = express();
 
 // ─── Health endpoint BEFORE any middleware ────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ─── Temporary debug endpoint — remove once env vars confirmed ────────────────
-app.get('/debug/env-check', (_req, res) => {
-  const vars = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'GEMINI_API_KEY', 'FRONTEND_URL', 'PORT', 'NODE_ENV'];
-  res.json(Object.fromEntries(vars.map(k => [k, process.env[k] ? 'SET' : 'MISSING'])));
 });
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
@@ -51,6 +46,7 @@ app.use('/api/trips/:joinToken/ai-suggest',   aiRouter);
 app.use('/api/trips/:joinToken/budget',       budgetRouter);
 app.use('/api/trips/:joinToken/availability', availabilityRouter);
 app.use('/api/trips/:joinToken/deadlines',    deadlinesRouter);
+app.use('/api/trips/:joinToken/couples',     couplesRouter);
 
 // ─── 404 fallthrough ─────────────────────────────────────────────────────────
 app.use((_req, res) => {

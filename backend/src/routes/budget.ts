@@ -13,15 +13,16 @@ const DINING_STYLES = ['local_cheap', 'mixed', 'restaurants'];
 router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   const trip = (req as any).trip;
   const member = (req as any).member;
-  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, notes } = req.body;
+  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, notes, couple_id } = req.body;
 
-  if (!ACCOMMODATION_TIERS.includes(accommodation_tier)) {
+  // Validate only when provided (fields are optional for auto-save)
+  if (accommodation_tier !== undefined && !ACCOMMODATION_TIERS.includes(accommodation_tier)) {
     return res.status(400).json({ error: 'accommodation_tier must be budget, mid, or premium' });
   }
-  if (!TRANSPORT_PREFS.includes(transport_pref)) {
+  if (transport_pref !== undefined && !TRANSPORT_PREFS.includes(transport_pref)) {
     return res.status(400).json({ error: 'transport_pref must be bus_train, flight, or self_drive' });
   }
-  if (!DINING_STYLES.includes(dining_style)) {
+  if (dining_style !== undefined && !DINING_STYLES.includes(dining_style)) {
     return res.status(400).json({ error: 'dining_style must be local_cheap, mixed, or restaurants' });
   }
   if (activities && !Array.isArray(activities)) {
@@ -34,21 +35,28 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
     return res.status(400).json({ error: 'daily_budget_max must be a number' });
   }
 
+  // Build upsert payload — only include provided fields
+  const prefData: Record<string, any> = {
+    trip_id: trip.id,
+    member_id: member.id,
+  };
+  if (accommodation_tier !== undefined) prefData.accommodation_tier = accommodation_tier;
+  if (transport_pref     !== undefined) prefData.transport_pref     = transport_pref;
+  if (dining_style       !== undefined) prefData.dining_style       = dining_style;
+  if (activities         !== undefined) prefData.activities         = activities || [];
+  if (daily_budget_min   !== undefined) prefData.daily_budget_min   = daily_budget_min;
+  if (daily_budget_max   !== undefined) prefData.daily_budget_max   = daily_budget_max;
+  if (notes              !== undefined) prefData.notes              = notes || null;
+  if (couple_id          !== undefined) prefData.couple_id          = couple_id;
+
+  // Require at least one preference field
+  if (Object.keys(prefData).length <= 2) {
+    return res.status(400).json({ error: 'At least one preference field is required' });
+  }
+
   const { data, error } = await supabase
     .from('budget_preferences')
-    .upsert(
-      {
-        trip_id: trip.id,
-        member_id: member.id,
-        accommodation_tier,
-        transport_pref,
-        dining_style,
-        activities: activities || [],
-        daily_budget_min,
-        daily_budget_max,
-        notes: notes || null,
-      },
-      { onConflict: 'trip_id,member_id' }
+    .upsert(prefData, { onConflict: 'trip_id,member_id' }
     )
     .select()
     .single();

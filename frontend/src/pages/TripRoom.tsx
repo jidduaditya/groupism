@@ -2,14 +2,16 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import MemberCirclesRow from "@/components/MemberCirclesRow";
+import CoupleReadinessStrip from "@/components/CoupleReadinessStrip";
+import DeadlineSetterCollapsed from "@/components/DeadlineSetterCollapsed";
 import DestinationSearchCard from "@/components/DestinationSearchCard";
 import BudgetDropdowns from "@/components/BudgetDropdowns";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import PersonalPreferencesCard from "@/components/PersonalPreferencesCard";
-import { cn } from "@/lib/utils";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { useAppVersion } from "@/hooks/useAppVersion";
 
 interface Member {
   id: string;
@@ -18,6 +20,28 @@ interface Member {
   has_confirmed: boolean;
   confirmed_at: string | null;
   joined_at: string;
+  couple_id?: string | null;
+}
+
+interface Couple {
+  id: string;
+  couple_name: string | null;
+  member_1: { id: string; display_name: string; has_confirmed: boolean } | null;
+  member_2: { id: string; display_name: string; has_confirmed: boolean } | null;
+}
+
+interface Deadline {
+  item_type: string;
+  due_date: string;
+  locked: boolean;
+}
+
+interface Destination {
+  id: string;
+  name: string;
+  votes: number;
+  voter_member_ids: string[];
+  voter_couple_ids: string[];
 }
 
 interface TripData {
@@ -51,9 +75,15 @@ const TripRoom = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [budgetPrefs, setBudgetPrefs] = useState<any[]>([]);
   const [availSlots, setAvailSlots] = useState<any[]>([]);
+  const [couples, setCouples] = useState<Couple[]>([]);
+  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [appVersion] = useAppVersion();
+  const isV5 = appVersion === "v5";
 
   const tokens = joinToken ? getTokens(joinToken) : null;
   const isOrganiser = !!tokens?.organiserToken;
@@ -67,6 +97,9 @@ const TripRoom = () => {
       setMembers(data.members);
       setBudgetPrefs(data.budget_preferences ?? []);
       setAvailSlots(data.availability_slots ?? []);
+      setCouples(data.couples ?? []);
+      setDeadlines(data.deadlines ?? []);
+      setDestinations(data.destinations ?? []);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Trip not found");
@@ -108,6 +141,11 @@ const TripRoom = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
+        () => fetchTrip()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "couples", filter: `trip_id=eq.${trip.id}` },
         () => fetchTrip()
       )
       .subscribe();
@@ -172,12 +210,18 @@ const TripRoom = () => {
   // Derived state
   const myMember = members.find((m) => m.id === currentMemberId);
   const hasConfirmed = myMember?.has_confirmed || false;
+  const myCoupleId = myMember?.couple_id ?? null;
 
   const card2Enabled = trip.selected_destination_id !== null;
   const card3Enabled = trip.budget_min !== null;
 
   // Current user's existing budget preferences
   const myPrefs = budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
+
+  // Deadline lookups by item_type
+  const destDeadline = deadlines.find((d) => d.item_type === "destination_vote") ?? null;
+  const budgetDeadline = deadlines.find((d) => d.item_type === "budget_input") ?? null;
+  const availDeadline = deadlines.find((d) => d.item_type === "availability") ?? null;
 
   // Header subtitle
   const headerParts: string[] = [];
@@ -187,7 +231,11 @@ const TripRoom = () => {
   if (trip.travel_from && trip.travel_to) {
     headerParts.push(`${formatDate(trip.travel_from)}–${formatDate(trip.travel_to)}`);
   }
-  headerParts.push(`${members.length} people`);
+  if (isV5 && couples.length > 0) {
+    headerParts.push(`${couples.length} couples`);
+  } else {
+    headerParts.push(`${members.length} people`);
+  }
 
   return (
     <div className="min-h-screen relative z-10">
@@ -218,7 +266,31 @@ const TripRoom = () => {
           members={members}
           groupSize={trip.group_size || members.length}
           currentMemberId={currentMemberId}
+          {...(isV5 ? { couples, joinToken: joinToken! } : {})}
         />
+
+        {/* Couple readiness strip — V5 organiser only */}
+        {isV5 && isOrganiser && couples.length > 0 && (
+          <div className="mt-4">
+            <CoupleReadinessStrip
+              couples={couples}
+              destinations={destinations}
+              budgetPrefs={budgetPrefs}
+              availSlots={availSlots}
+            />
+          </div>
+        )}
+
+        {/* Deadline setter — V5 organiser only */}
+        {isV5 && isOrganiser && (
+          <div className="mt-4">
+            <DeadlineSetterCollapsed
+              joinToken={joinToken!}
+              deadlines={deadlines}
+              onUpdated={fetchTrip}
+            />
+          </div>
+        )}
 
         {/* Card 1 — Destination */}
         <div className="mt-8">
@@ -227,6 +299,7 @@ const TripRoom = () => {
             trip={trip}
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
+            deadline={isV5 ? destDeadline : undefined}
           />
         </div>
 
@@ -251,6 +324,7 @@ const TripRoom = () => {
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
             disabled={!card2Enabled}
+            deadline={isV5 ? budgetDeadline : undefined}
           />
         </div>
 
@@ -265,6 +339,7 @@ const TripRoom = () => {
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
             disabled={!card3Enabled}
+            availabilityDeadline={isV5 ? availDeadline : undefined}
           />
         </div>
 
@@ -274,6 +349,7 @@ const TripRoom = () => {
             joinToken={joinToken!}
             existingPrefs={myPrefs}
             onRefresh={fetchTrip}
+            coupleId={isV5 ? myCoupleId : undefined}
           />
         </div>
       </div>

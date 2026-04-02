@@ -156,10 +156,11 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     { data: availSlots },
     { data: travelWindows },
     { data: deadlines },
+    { data: couples },
   ] = await Promise.all([
     supabase
       .from('trip_members')
-      .select('id, display_name, is_organiser, has_confirmed, confirmed_at, joined_at')
+      .select('id, display_name, is_organiser, has_confirmed, confirmed_at, joined_at, couple_id')
       .eq('trip_id', trip.id)
       .order('joined_at', { ascending: true }),
     supabase
@@ -167,7 +168,7 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
       .select(`
         id, name, tagline, pros, cons, best_for,
         estimated_cost_min, estimated_cost_max, source, created_at,
-        destination_votes(member_id)
+        destination_votes(member_id, couple_id)
       `)
       .eq('trip_id', trip.id)
       .order('created_at', { ascending: true }),
@@ -193,6 +194,15 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
       .from('deadlines')
       .select('*')
       .eq('trip_id', trip.id),
+    supabase
+      .from('couples')
+      .select(`
+        id, couple_name,
+        member_1:trip_members!couples_member_id_1_fkey(id, display_name, has_confirmed),
+        member_2:trip_members!couples_member_id_2_fkey(id, display_name, has_confirmed)
+      `)
+      .eq('trip_id', trip.id)
+      .order('created_at', { ascending: true }),
   ]);
 
   // Auto-lock past-due deadlines
@@ -217,6 +227,7 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     ...d,
     votes: d.destination_votes?.length ?? 0,
     voter_member_ids: (d.destination_votes || []).map((v: any) => v.member_id),
+    voter_couple_ids: [...new Set((d.destination_votes || []).map((v: any) => v.couple_id).filter(Boolean))],
     destination_votes: undefined,
   }));
 
@@ -270,6 +281,7 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     travel_windows: travelWindows ?? null,
     deadlines: deadlines ?? [],
     readiness_v2: readinessV2,
+    couples: couples ?? [],
   });
 });
 

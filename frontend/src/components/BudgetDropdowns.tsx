@@ -10,11 +10,14 @@ interface BudgetDropdownsProps {
   trip: {
     budget_min: number | null;
     budget_max: number | null;
+    travel_from: string | null;
+    travel_to: string | null;
     destination_summary: any;
   };
   isOrganiser: boolean;
   onTripUpdated: () => void;
   disabled: boolean;
+  deadline?: { due_date: string; locked: boolean } | null;
 }
 
 const BUDGET_OPTIONS = [
@@ -43,7 +46,10 @@ export default function BudgetDropdowns({
   const [budgetMax, setBudgetMax] = useState<number | null>(
     trip.budget_max ?? null
   );
+  const [travelFrom, setTravelFrom] = useState<string>(trip.travel_from ?? "");
+  const [travelTo, setTravelTo] = useState<string>(trip.travel_to ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const validationError =
     budgetMin !== null && budgetMax !== null && budgetMin > budgetMax
@@ -94,6 +100,56 @@ export default function BudgetDropdowns({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [budgetMin, budgetMax, save]);
+
+  const saveDate = useCallback(
+    async (from: string, to: string) => {
+      if (!isOrganiser) return;
+      try {
+        await api.patch(
+          `/api/trips/${joinToken}`,
+          { travel_from: from || null, travel_to: to || null },
+          joinToken
+        );
+        onTripUpdated();
+      } catch {
+        toast({ title: "Failed to save dates", variant: "destructive" });
+      }
+    },
+    [isOrganiser, joinToken, onTripUpdated]
+  );
+
+  const handleDateChange = (field: "from" | "to", value: string) => {
+    const newFrom = field === "from" ? value : travelFrom;
+    const newTo = field === "to" ? value : travelTo;
+    if (field === "from") setTravelFrom(value);
+    else setTravelTo(value);
+
+    if (dateDebounceRef.current) clearTimeout(dateDebounceRef.current);
+    dateDebounceRef.current = setTimeout(() => {
+      saveDate(newFrom, newTo);
+    }, 800);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (dateDebounceRef.current) clearTimeout(dateDebounceRef.current);
+    };
+  }, []);
+
+  function formatDateDisplay(d: string): string {
+    return new Date(d).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function daysUntilDeadline(dueDate: string): number {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    return Math.ceil((due.getTime() - now.getTime()) / 86400000);
+  }
 
   return (
     <div
@@ -165,6 +221,53 @@ export default function BudgetDropdowns({
           Consider adjusting your budget or choosing a different destination.
         </div>
       )}
+
+      {/* Travel dates */}
+      <div className="mt-6 border-t border-b-subtle pt-4">
+        <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-3">
+          When are you travelling?
+        </p>
+
+        {isOrganiser ? (
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="font-ui text-xs text-t-secondary block mb-1">From</label>
+              <input
+                type="date"
+                value={travelFrom}
+                onChange={(e) => handleDateChange("from", e.target.value)}
+                className="w-full h-10 px-3 bg-surface border border-b-mid rounded-[4px] font-mono text-sm text-t-primary focus:outline-none focus:border-t-secondary"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="font-ui text-xs text-t-secondary block mb-1">To</label>
+              <input
+                type="date"
+                value={travelTo}
+                onChange={(e) => handleDateChange("to", e.target.value)}
+                min={travelFrom}
+                className="w-full h-10 px-3 bg-surface border border-b-mid rounded-[4px] font-mono text-sm text-t-primary focus:outline-none focus:border-t-secondary"
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="font-mono text-sm text-t-primary">
+            {trip.travel_from && trip.travel_to
+              ? `${formatDateDisplay(trip.travel_from)} → ${formatDateDisplay(trip.travel_to)}`
+              : "Dates not set yet"}
+          </p>
+        )}
+      </div>
+
+      {/* Inline deadline */}
+      {deadline && !deadline.locked && (() => {
+        const days = daysUntilDeadline(deadline.due_date);
+        return (
+          <p className={cn("font-ui text-xs mt-4", days <= 2 ? "text-terra" : "text-t-tertiary")}>
+            {days <= 0 ? "⚠ Deadline passed" : `Submit budget by ${formatDateDisplay(deadline.due_date)}`}
+          </p>
+        );
+      })()}
     </div>
   );
 }

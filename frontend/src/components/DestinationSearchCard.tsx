@@ -19,6 +19,7 @@ interface DestinationSearchCardProps {
   };
   isOrganiser: boolean;
   onTripUpdated: () => void;
+  deadline?: { due_date: string; locked: boolean } | null;
 }
 
 type ViewState =
@@ -34,6 +35,7 @@ export default function DestinationSearchCard({
   trip,
   isOrganiser,
   onTripUpdated,
+  deadline,
 }: DestinationSearchCardProps) {
   const hasExistingDestination =
     trip.selected_destination_id !== null && trip.destination_summary !== null;
@@ -304,6 +306,19 @@ export default function DestinationSearchCard({
           </button>
         </div>
       )}
+
+      {/* Inline deadline */}
+      {deadline && !deadline.locked && (() => {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const days = Math.ceil((new Date(deadline.due_date).getTime() - now.getTime()) / 86400000);
+        return (
+          <p className={cn("font-ui text-xs mt-4", days <= 2 ? "text-terra" : "text-t-tertiary")}>
+            {days <= 0
+              ? "⚠ Deadline passed"
+              : `Choose destination by ${new Date(deadline.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+          </p>
+        );
+      })()}
     </div>
   );
 }

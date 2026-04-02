@@ -11,7 +11,8 @@ const VALID_TIERS = ['unavailable', 'free', 'could_work'];
 router.post('/', loadTrip, requireMember, async (req, res) => {
   const trip = (req as any).trip;
   const member = (req as any).member;
-  const { slot, slots } = req.body;
+  const { slot, slots, couple_id } = req.body;
+  const effectiveCoupleId = couple_id ?? member.couple_id ?? null;
 
   // Single-slot upsert mode
   if (slot) {
@@ -35,7 +36,7 @@ router.post('/', loadTrip, requireMember, async (req, res) => {
     const { error } = await supabase
       .from('availability_slots')
       .upsert(
-        { trip_id: trip.id, member_id: member.id, slot_date: slot.date, tier: slot.tier },
+        { trip_id: trip.id, member_id: member.id, slot_date: slot.date, tier: slot.tier, ...(effectiveCoupleId ? { couple_id: effectiveCoupleId } : {}) },
         { onConflict: 'trip_id,member_id,slot_date' }
       );
     if (error) return res.status(500).json({ error: 'Failed to save slot' });
@@ -70,6 +71,7 @@ router.post('/', loadTrip, requireMember, async (req, res) => {
         member_id: member.id,
         slot_date: s.date,
         tier: s.tier,
+        ...(effectiveCoupleId ? { couple_id: effectiveCoupleId } : {}),
       }))
     )
     .select();

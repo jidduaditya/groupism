@@ -106,12 +106,18 @@ router.post('/:destId/vote', loadTrip, requireMember, async (req, res) => {
   if (!dest) return res.status(404).json({ error: 'Destination not found in this trip' });
 
   // Upsert: if member already voted, change their vote to this destination
+  const votePayload: Record<string, any> = {
+    trip_id: trip.id,
+    destination_id: destId,
+    member_id: member.id,
+  };
+  if (member.couple_id) {
+    votePayload.couple_id = member.couple_id;
+  }
+
   const { error } = await supabase
     .from('destination_votes')
-    .upsert(
-      { trip_id: trip.id, destination_id: destId, member_id: member.id },
-      { onConflict: 'trip_id,member_id' }
-    );
+    .upsert(votePayload, { onConflict: 'trip_id,member_id' });
 
   if (error) return res.status(500).json({ error: 'Failed to cast vote' });
 

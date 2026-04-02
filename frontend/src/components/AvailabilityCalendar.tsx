@@ -20,6 +20,7 @@ interface AvailabilityCalendarProps {
   isOrganiser: boolean;
   onTripUpdated: () => void;
   disabled: boolean;
+  availabilityDeadline?: { due_date: string; locked: boolean } | null;
 }
 
 type Tier = "free" | "could_work" | "unavailable";
@@ -63,6 +64,7 @@ export default function AvailabilityCalendar({
   isOrganiser,
   onTripUpdated,
   disabled,
+  availabilityDeadline,
 }: AvailabilityCalendarProps) {
   const [localSlots, setLocalSlots] = useState<
     Array<{ member_id: string; slot_date: string; tier: string }>
@@ -390,6 +392,19 @@ export default function AvailabilityCalendar({
           </div>
         </>
       )}
+
+      {/* Inline deadline */}
+      {availabilityDeadline && !availabilityDeadline.locked && (() => {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const days = Math.ceil((new Date(availabilityDeadline.due_date).getTime() - now.getTime()) / 86400000);
+        return (
+          <p className={cn("font-ui text-xs mt-4", days <= 2 ? "text-terra" : "text-t-tertiary")}>
+            {days <= 0
+              ? "⚠ Deadline passed"
+              : `Submit availability by ${new Date(availabilityDeadline.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+          </p>
+        );
+      })()}
     </div>
   );
 }
