@@ -17,6 +17,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ─── Temporary debug endpoint — remove once env vars confirmed ────────────────
+app.get('/debug/env-check', (_req, res) => {
+  const vars = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY', 'GEMINI_API_KEY', 'FRONTEND_URL', 'PORT', 'NODE_ENV'];
+  res.json(Object.fromEntries(vars.map(k => [k, process.env[k] ? 'SET' : 'MISSING'])));
+});
+
 // ─── CORS ────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   'https://groupism-p9g9.vercel.app',
