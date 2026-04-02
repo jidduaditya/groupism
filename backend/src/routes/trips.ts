@@ -37,18 +37,27 @@ router.post('/', async (req, res) => {
   const member_token    = generateMemberToken();
   let   join_token      = generateJoinToken(name);
 
+  // Build insert payload — only include optional fields when provided
+  const tripData: Record<string, any> = { name, join_token, organiser_token };
+  if (budget_min  != null) tripData.budget_min  = budget_min;
+  if (budget_max  != null) tripData.budget_max  = budget_max;
+  if (travel_from)         tripData.travel_from = travel_from;
+  if (travel_to)           tripData.travel_to   = travel_to;
+  if (deadline)            tripData.deadline    = deadline;
+
   // Retry once on join_token collision (extremely rare but possible)
   const { data: trip, error } = await supabase
     .from('trips')
-    .insert({ name, join_token, organiser_token, budget_min, budget_max, travel_from, travel_to, deadline })
+    .insert(tripData)
     .select()
     .single();
 
   if (error?.code === '23505') {
     join_token = generateJoinToken(name);
+    tripData.join_token = join_token;
     const retry = await supabase
       .from('trips')
-      .insert({ name, join_token, organiser_token, budget_min, budget_max, travel_from, travel_to, deadline })
+      .insert(tripData)
       .select()
       .single();
 
