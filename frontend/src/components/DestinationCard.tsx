@@ -2,6 +2,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface DestinationCardProps {
+  id?: string;
   name: string;
   tagline: string;
   votes: number;

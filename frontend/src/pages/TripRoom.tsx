@@ -3,11 +3,13 @@ import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import DestinationCard from "@/components/DestinationCard";
 import ReadinessBar from "@/components/ReadinessBar";
+import TripRoomV2Sections from "@/components/v2/TripRoomV2Sections";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { useVersionToggle } from "@/hooks/useVersionToggle";
 
 interface Member {
   id: string;
@@ -77,6 +79,16 @@ const TripRoom = () => {
   const [addingDest, setAddingDest] = useState(false);
   const [newDestName, setNewDestName] = useState("");
 
+  // V2 state
+  const [budgetPrefs, setBudgetPrefs] = useState<any[]>([]);
+  const [budgetEstimate, setBudgetEstimate] = useState<any>(null);
+  const [availSlots, setAvailSlots] = useState<any[]>([]);
+  const [travelWindows, setTravelWindows] = useState<any>(null);
+  const [deadlinesData, setDeadlinesData] = useState<any[]>([]);
+  const [readinessV2, setReadinessV2] = useState(0);
+
+  const [version, toggleVersion] = useVersionToggle();
+
   const tokens = joinToken ? getTokens(joinToken) : null;
   const isOrganiser = !!tokens?.organiserToken;
   const currentMemberId = tokens?.memberId ?? null;
@@ -89,6 +101,13 @@ const TripRoom = () => {
       setMembers(data.members);
       setDestinations(data.destinations);
       setReadiness(data.readiness_score);
+      // V2 fields
+      setBudgetPrefs(data.budget_preferences ?? []);
+      setBudgetEstimate(data.budget_estimate ?? null);
+      setAvailSlots(data.availability_slots ?? []);
+      setTravelWindows(data.travel_windows ?? null);
+      setDeadlinesData(data.deadlines ?? []);
+      setReadinessV2(data.readiness_v2 ?? 0);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Trip not found");
@@ -101,7 +120,7 @@ const TripRoom = () => {
     fetchTrip();
   }, [fetchTrip]);
 
-  // Supabase Realtime — subscribe to vote and member changes
+  // Supabase Realtime — subscribe to vote, member, and v2 table changes
   useEffect(() => {
     if (!supabase || !trip?.id) return;
 
@@ -115,6 +134,21 @@ const TripRoom = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "trip_members", filter: `trip_id=eq.${trip.id}` },
+        () => fetchTrip()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "budget_preferences", filter: `trip_id=eq.${trip.id}` },
+        () => fetchTrip()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
+        () => fetchTrip()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deadlines", filter: `trip_id=eq.${trip.id}` },
         () => fetchTrip()
       )
       .subscribe();
@@ -148,7 +182,7 @@ const TripRoom = () => {
     try {
       await api.post(`/api/trips/${joinToken}/confirm`, {}, joinToken);
       await fetchTrip();
-      toast({ title: "Budget confirmed" });
+      toast({ title: "Confirmed" });
     } catch (err: any) {
       toast({ title: "Confirm failed", description: err.message, variant: "destructive" });
     }
@@ -235,7 +269,7 @@ const TripRoom = () => {
     <div className="min-h-screen relative z-10">
       <Header />
       <div className="max-w-2xl mx-auto px-6 pt-24 pb-20">
-        {/* Header */}
+        {/* Header — shared between v1 and v2 */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-2">
           <div>
             <h1 className="font-display text-[32px] md:text-[36px] font-bold leading-[1.05] text-t-primary">
@@ -246,139 +280,196 @@ const TripRoom = () => {
             </p>
           </div>
           <div className="flex gap-3 mt-4 md:mt-0">
+            {/* Version toggle */}
+            <div className="flex h-9 rounded-[4px] border border-b-mid overflow-hidden">
+              <button
+                onClick={version === "v2" ? toggleVersion : undefined}
+                className={cn(
+                  "px-3 font-mono text-xs transition-all",
+                  version === "v1"
+                    ? "bg-amber text-[#1c1a15] font-medium"
+                    : "bg-surface text-t-secondary hover:bg-hover"
+                )}
+              >
+                v1
+              </button>
+              <button
+                onClick={version === "v1" ? toggleVersion : undefined}
+                className={cn(
+                  "px-3 font-mono text-xs transition-all",
+                  version === "v2"
+                    ? "bg-amber text-[#1c1a15] font-medium"
+                    : "bg-surface text-t-secondary hover:bg-hover"
+                )}
+              >
+                v2
+              </button>
+            </div>
             <Button variant="outline-strong" size="sm" onClick={handleCopyInvite}>
               {copied ? "Copied!" : "Copy Link"}
             </Button>
           </div>
         </div>
 
-        {/* Readiness */}
-        <div className="section-divider mt-12">
-          <span>Trip Readiness — <span className="font-mono text-amber">{readiness}%</span></span>
-        </div>
-        <ReadinessBar members={readinessMembers} />
+        {/* V1 sections */}
+        {version === "v1" && (
+          <>
+            {/* Readiness */}
+            <div className="section-divider mt-12">
+              <span>Trip Readiness — <span className="font-mono text-amber">{readiness}%</span></span>
+            </div>
+            <ReadinessBar members={readinessMembers} />
 
-        {/* Deadline */}
-        {trip.deadline && (
-          <p
-            className={cn(
-              "mt-3 font-ui text-sm",
-              isWithin3Days(trip.deadline) ? "text-terra font-medium" : "text-t-secondary"
-            )}
-          >
-            Confirm by {formatDate(trip.deadline)}
-            {isWithin3Days(trip.deadline) && " — deadline approaching"}
-          </p>
-        )}
-
-        {isOrganiser && unresponded > 0 && (
-          <p className="mt-3 font-ui text-sm text-terra">
-            {unresponded} people haven't confirmed yet.{" "}
-            <button
-              className="underline hover:no-underline transition-all"
-              onClick={handleNudge}
-            >
-              Nudge them →
-            </button>
-          </p>
-        )}
-
-        {/* Destinations */}
-        <div className="section-divider mt-12">
-          <span>Where are we going</span>
-        </div>
-        {destinations.length === 0 ? (
-          <p className="font-ui text-sm text-t-tertiary py-4">No destinations yet. Add one or use AI suggestions.</p>
-        ) : (
-          <div className="divide-y divide-b-subtle">
-            {destinations.map((d) => {
-              const hasVoted = currentMemberId
-                ? (d.voter_member_ids || []).includes(currentMemberId)
-                : false;
-              return (
-                <DestinationCard
-                  key={d.id}
-                  id={d.id}
-                  name={d.name}
-                  tagline={d.tagline || ""}
-                  votes={d.votes}
-                  pros={d.pros || []}
-                  cons={d.cons || []}
-                  bestFor={d.best_for || ""}
-                  estCost={formatCost(d.estimated_cost_min, d.estimated_cost_max)}
-                  hasVoted={hasVoted}
-                  isWinning={d.votes === maxVotes && d.votes > 0}
-                  onVote={() => handleVote(d.id)}
-                />
-              );
-            })}
-          </div>
-        )}
-
-        {isOrganiser && !addingDest && (
-          <button
-            className="mt-4 font-ui text-sm text-t-secondary hover:text-t-primary transition-colors"
-            onClick={() => setAddingDest(true)}
-          >
-            + Add your own destination
-          </button>
-        )}
-
-        {addingDest && (
-          <div className="mt-4 flex gap-3">
-            <input
-              type="text"
-              value={newDestName}
-              onChange={(e) => setNewDestName(e.target.value)}
-              placeholder="Destination name"
-              className="flex-1 h-11 px-3 bg-surface border border-b-mid rounded-[4px] text-t-primary font-ui text-sm focus:outline-none focus:border-t-secondary transition-colors"
-              onKeyDown={(e) => e.key === "Enter" && handleAddDestination()}
-            />
-            <Button variant="amber" size="sm" onClick={handleAddDestination} disabled={!newDestName.trim()}>
-              Add
-            </Button>
-            <Button variant="outline-strong" size="sm" onClick={() => setAddingDest(false)}>
-              Cancel
-            </Button>
-          </div>
-        )}
-
-        {/* Members */}
-        <div className="section-divider mt-12">
-          <span>Who's in</span>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          {members.map((member) => (
-            <div key={member.id} className="flex flex-col items-center gap-1.5">
-              <div
+            {/* Deadline */}
+            {trip.deadline && (
+              <p
                 className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center font-ui text-xs font-medium bg-elevated text-t-primary transition-all",
-                  member.has_confirmed && "ring-2 ring-green",
-                  !member.has_confirmed && "opacity-40"
+                  "mt-3 font-ui text-sm",
+                  isWithin3Days(trip.deadline) ? "text-terra font-medium" : "text-t-secondary"
                 )}
               >
-                {initials(member.display_name)}
-              </div>
-              <span className="font-ui text-xs text-t-secondary">{member.display_name}</span>
-            </div>
-          ))}
-        </div>
+                Confirm by {formatDate(trip.deadline)}
+                {isWithin3Days(trip.deadline) && " — deadline approaching"}
+              </p>
+            )}
 
-        {/* Budget */}
-        <div className="section-divider mt-12">
-          <span>Budget</span>
-        </div>
-        <p className="font-display text-[28px] font-bold text-t-primary mb-4">
-          {formatCost(trip.budget_min, trip.budget_max)}
-        </p>
-        {budgetConfirmed ? (
-          <p className="font-ui text-sm text-green flex items-center gap-2">
-            <span>✓</span> You've confirmed the budget
-          </p>
-        ) : (
-          <Button variant="outline-strong" onClick={handleConfirm}>
-            I'm okay with this budget
-          </Button>
+            {isOrganiser && unresponded > 0 && (
+              <p className="mt-3 font-ui text-sm text-terra">
+                {unresponded} people haven't confirmed yet.{" "}
+                <button
+                  className="underline hover:no-underline transition-all"
+                  onClick={handleNudge}
+                >
+                  Nudge them →
+                </button>
+              </p>
+            )}
+
+            {/* Destinations */}
+            <div className="section-divider mt-12">
+              <span>Where are we going</span>
+            </div>
+            {destinations.length === 0 ? (
+              <p className="font-ui text-sm text-t-tertiary py-4">No destinations yet. Add one or use AI suggestions.</p>
+            ) : (
+              <div className="divide-y divide-b-subtle">
+                {destinations.map((d) => {
+                  const hasVoted = currentMemberId
+                    ? (d.voter_member_ids || []).includes(currentMemberId)
+                    : false;
+                  return (
+                    <DestinationCard
+                      key={d.id}
+                      id={d.id}
+                      name={d.name}
+                      tagline={d.tagline || ""}
+                      votes={d.votes}
+                      pros={d.pros || []}
+                      cons={d.cons || []}
+                      bestFor={d.best_for || ""}
+                      estCost={formatCost(d.estimated_cost_min, d.estimated_cost_max)}
+                      hasVoted={hasVoted}
+                      isWinning={d.votes === maxVotes && d.votes > 0}
+                      onVote={() => handleVote(d.id)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {isOrganiser && !addingDest && (
+              <button
+                className="mt-4 font-ui text-sm text-t-secondary hover:text-t-primary transition-colors"
+                onClick={() => setAddingDest(true)}
+              >
+                + Add your own destination
+              </button>
+            )}
+
+            {addingDest && (
+              <div className="mt-4 flex gap-3">
+                <input
+                  type="text"
+                  value={newDestName}
+                  onChange={(e) => setNewDestName(e.target.value)}
+                  placeholder="Destination name"
+                  className="flex-1 h-11 px-3 bg-surface border border-b-mid rounded-[4px] text-t-primary font-ui text-sm focus:outline-none focus:border-t-secondary transition-colors"
+                  onKeyDown={(e) => e.key === "Enter" && handleAddDestination()}
+                />
+                <Button variant="amber" size="sm" onClick={handleAddDestination} disabled={!newDestName.trim()}>
+                  Add
+                </Button>
+                <Button variant="outline-strong" size="sm" onClick={() => setAddingDest(false)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
+
+            {/* Members */}
+            <div className="section-divider mt-12">
+              <span>Who's in</span>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {members.map((member) => (
+                <div key={member.id} className="flex flex-col items-center gap-1.5">
+                  <div
+                    className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center font-ui text-xs font-medium bg-elevated text-t-primary transition-all",
+                      member.has_confirmed && "ring-2 ring-green",
+                      !member.has_confirmed && "opacity-40"
+                    )}
+                  >
+                    {initials(member.display_name)}
+                  </div>
+                  <span className="font-ui text-xs text-t-secondary">{member.display_name}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Budget */}
+            <div className="section-divider mt-12">
+              <span>Budget</span>
+            </div>
+            <p className="font-display text-[28px] font-bold text-t-primary mb-4">
+              {formatCost(trip.budget_min, trip.budget_max)}
+            </p>
+            {budgetConfirmed ? (
+              <p className="font-ui text-sm text-green flex items-center gap-2">
+                <span>✓</span> You've confirmed the budget
+              </p>
+            ) : (
+              <Button variant="outline-strong" onClick={handleConfirm}>
+                I'm okay with this budget
+              </Button>
+            )}
+          </>
+        )}
+
+        {/* V2 sections */}
+        {version === "v2" && joinToken && (
+          <TripRoomV2Sections
+            joinToken={joinToken}
+            trip={trip}
+            members={members}
+            destinations={destinations}
+            budgetPrefs={budgetPrefs}
+            budgetEstimate={budgetEstimate}
+            availSlots={availSlots}
+            travelWindows={travelWindows}
+            deadlines={deadlinesData}
+            readinessV2={readinessV2}
+            isOrganiser={isOrganiser}
+            currentMemberId={currentMemberId}
+            onRefresh={fetchTrip}
+            onVote={handleVote}
+            onConfirm={handleConfirm}
+            onAddDestination={handleAddDestination}
+            addingDest={addingDest}
+            setAddingDest={setAddingDest}
+            newDestName={newDestName}
+            setNewDestName={setNewDestName}
+            budgetConfirmed={budgetConfirmed}
+          />
         )}
       </div>
     </div>

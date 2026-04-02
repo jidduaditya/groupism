@@ -93,23 +93,70 @@ router.post('/', async (req, res) => {
 router.get('/:joinToken', loadTrip, async (req, res) => {
   const trip = (req as any).trip;
 
-  // Fetch members
-  const { data: members } = await supabase
-    .from('trip_members')
-    .select('id, display_name, is_organiser, has_confirmed, confirmed_at, joined_at')
-    .eq('trip_id', trip.id)
-    .order('joined_at', { ascending: true });
+  // Fetch all data in parallel
+  const [
+    { data: members },
+    { data: destinations },
+    { data: budgetPrefs },
+    { data: budgetEstimate },
+    { data: availSlots },
+    { data: travelWindows },
+    { data: deadlines },
+  ] = await Promise.all([
+    supabase
+      .from('trip_members')
+      .select('id, display_name, is_organiser, has_confirmed, confirmed_at, joined_at')
+      .eq('trip_id', trip.id)
+      .order('joined_at', { ascending: true }),
+    supabase
+      .from('destination_options')
+      .select(`
+        id, name, tagline, pros, cons, best_for,
+        estimated_cost_min, estimated_cost_max, source, created_at,
+        destination_votes(member_id)
+      `)
+      .eq('trip_id', trip.id)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('budget_preferences')
+      .select('*, trip_members(id, display_name)')
+      .eq('trip_id', trip.id),
+    supabase
+      .from('budget_estimates')
+      .select('*')
+      .eq('trip_id', trip.id)
+      .maybeSingle(),
+    supabase
+      .from('availability_slots')
+      .select('*, trip_members(id, display_name)')
+      .eq('trip_id', trip.id),
+    supabase
+      .from('travel_windows')
+      .select('*')
+      .eq('trip_id', trip.id)
+      .maybeSingle(),
+    supabase
+      .from('deadlines')
+      .select('*')
+      .eq('trip_id', trip.id),
+  ]);
 
-  // Fetch destinations with individual vote records (not just count)
-  const { data: destinations } = await supabase
-    .from('destination_options')
-    .select(`
-      id, name, tagline, pros, cons, best_for,
-      estimated_cost_min, estimated_cost_max, source, created_at,
-      destination_votes(member_id)
-    `)
-    .eq('trip_id', trip.id)
-    .order('created_at', { ascending: true });
+  // Auto-lock past-due deadlines
+  const now = new Date().toISOString().slice(0, 10);
+  const pastDueUnlocked = (deadlines || []).filter(
+    (dl: any) => !dl.locked && dl.due_date < now
+  );
+  if (pastDueUnlocked.length > 0) {
+    await Promise.all(
+      pastDueUnlocked.map((dl: any) =>
+        supabase.from('deadlines').update({ locked: true }).eq('id', dl.id)
+      )
+    );
+    // Mark them as locked in our local copy too
+    for (const dl of pastDueUnlocked) {
+      dl.locked = true;
+    }
+  }
 
   // Flatten vote counts and expose voter_member_ids
   const destinationsWithVotes = (destinations || []).map((d: any) => ({
@@ -119,11 +166,10 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     destination_votes: undefined,
   }));
 
-  // Readiness score: 50% voting + 50% confirmation
+  // V1 readiness score: 50% voting + 50% confirmation
   const memberIds = new Set((members || []).map((m: any) => m.id));
   const total = memberIds.size;
 
-  // Collect member IDs that have voted on any destination
   const votedMemberIds = new Set<string>();
   for (const d of destinations || []) {
     for (const v of (d as any).destination_votes || []) {
@@ -137,6 +183,23 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
   const confirmed = (members || []).filter((m: any) => m.has_confirmed).length;
   const readiness = total === 0 ? 0 : Math.round((voted / total) * 50 + (confirmed / total) * 50);
 
+  // V2 readiness: 4 dimensions, 25% each
+  const submittedAvailability = new Set(
+    (availSlots || []).map((s: any) => s.member_id)
+  ).size;
+  const submittedBudget = new Set(
+    (budgetPrefs || []).map((p: any) => p.member_id)
+  ).size;
+
+  const readinessV2 = total === 0
+    ? 0
+    : Math.round(
+        (voted / total) * 25 +
+        (submittedAvailability / total) * 25 +
+        (submittedBudget / total) * 25 +
+        (confirmed / total) * 25
+      );
+
   // Never expose organiser_token in GET response
   const { organiser_token: _omit, ...safeTrip } = trip;
 
@@ -147,6 +210,12 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     readiness_score: readiness,
     members_voted: voted,
     members_confirmed: confirmed,
+    budget_preferences: budgetPrefs ?? [],
+    budget_estimate: budgetEstimate ?? null,
+    availability_slots: availSlots ?? [],
+    travel_windows: travelWindows ?? null,
+    deadlines: deadlines ?? [],
+    readiness_v2: readinessV2,
   });
 });
 

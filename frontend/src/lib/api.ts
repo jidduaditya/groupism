@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const BASE = import.meta.env.VITE_API_URL || "https://groupism-production.up.railway.app";
 
 // ─── Token storage ───────────────────────────────────────────────────────────
 interface Tokens {
