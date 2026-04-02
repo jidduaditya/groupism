@@ -2,14 +2,15 @@ import 'dotenv/config';
 import app from './app';
 
 // ─── Startup env var check ────────────────────────────────────────────────────
-const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
-const optional = ['GEMINI_API_KEY', 'FRONTEND_URL'];
-console.log(
-  'Env check:',
-  [...required, ...optional].map(k => `${k}=${process.env[k] ? 'SET' : 'MISSING'}`).join(', ')
+const supaUrl = process.env.SUPABASE_URL || process.env.SUPABASE_PROJECT_URL;
+const supaKey = process.env.SUPABASE_SERVICE_KEY;
+console.log('Env check:',
+  `SUPABASE_URL=${supaUrl ? 'SET' : 'MISSING'}`,
+  `SUPABASE_SERVICE_KEY=${supaKey ? 'SET' : 'MISSING'}`,
+  `GEMINI_API_KEY=${process.env.GEMINI_API_KEY ? 'SET' : 'MISSING'}`,
+  `FRONTEND_URL=${process.env.FRONTEND_URL ? 'SET' : 'MISSING'}`,
 );
-const missing = required.filter(k => !process.env[k]);
-if (missing.length) console.error(`FATAL: Missing required env vars: ${missing.join(', ')}`);
+if (!supaUrl || !supaKey) console.error('FATAL: Missing required Supabase env vars');
 
 const PORT = Number(process.env.PORT) || 3001;
 

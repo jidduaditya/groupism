@@ -6,11 +6,16 @@ let _client: SupabaseClient | null = null;
 export function getSupabase(): SupabaseClient {
   if (_client) return _client;
 
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY');
+  const url = process.env.SUPABASE_URL || process.env.SUPABASE_PROJECT_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      `Missing Supabase env vars: ${!url ? 'SUPABASE_URL/SUPABASE_PROJECT_URL' : ''} ${!key ? 'SUPABASE_SERVICE_KEY' : ''}`.trim()
+    );
   }
 
-  _client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  _client = createClient(url, key);
   return _client;
 }
 
