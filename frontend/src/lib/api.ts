@@ -48,4 +48,11 @@ export const api = {
       headers: headers(joinToken),
       body: JSON.stringify(body),
     }).then(handleRes),
+
+  patch: (path: string, body: unknown, joinToken?: string) =>
+    fetch(`${BASE}${path}`, {
+      method: "PATCH",
+      headers: headers(joinToken),
+      body: JSON.stringify(body),
+    }).then(handleRes),
 };

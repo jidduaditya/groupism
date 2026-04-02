@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { generateOrganiserToken, generateMemberToken, generateJoinToken } from '../lib/tokens';
-import { loadTrip } from '../middleware/tokens';
+import { loadTrip, requireOrganiser } from '../middleware/tokens';
 
 const router = Router();
 
@@ -87,6 +87,35 @@ router.post('/', async (req, res) => {
     member_token,
     member_id:       member?.id,
   });
+});
+
+// PATCH /api/trips/:joinToken — organiser updates trip details (budget, dates, deadline)
+router.patch('/:joinToken', loadTrip, requireOrganiser, async (req, res) => {
+  const trip = (req as any).trip;
+  const { budget_min, budget_max, travel_from, travel_to, deadline } = req.body;
+
+  const updates: Record<string, any> = {};
+  if (budget_min  !== undefined) updates.budget_min  = budget_min;
+  if (budget_max  !== undefined) updates.budget_max  = budget_max;
+  if (travel_from !== undefined) updates.travel_from = travel_from;
+  if (travel_to   !== undefined) updates.travel_to   = travel_to;
+  if (deadline    !== undefined) updates.deadline    = deadline;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  const { data, error } = await supabase
+    .from('trips')
+    .update(updates)
+    .eq('id', trip.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: 'Failed to update trip' });
+
+  const { organiser_token: _omit, ...safeTrip } = data;
+  res.json({ trip: safeTrip });
 });
 
 // GET /api/trips/:joinToken — fetch everything for the Trip Room

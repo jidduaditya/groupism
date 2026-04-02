@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import DestinationCard from "@/components/DestinationCard";
 import ReadinessBar from "@/components/ReadinessBar";
+import OrganiserSetupPanel from "@/components/OrganiserSetupPanel";
 import TripRoomV2Sections from "@/components/v2/TripRoomV2Sections";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -38,18 +39,19 @@ interface TripData {
   id: string;
   name: string;
   join_token: string;
-  budget_min: number;
-  budget_max: number;
-  travel_from: string;
-  travel_to: string;
-  deadline: string;
+  budget_min: number | null;
+  budget_max: number | null;
+  travel_from: string | null;
+  travel_to: string | null;
+  deadline: string | null;
 }
 
-function formatCost(min: number, max: number): string {
-  return `₹${(min || 0).toLocaleString("en-IN")} – ₹${(max || 0).toLocaleString("en-IN")}`;
+function formatCost(min: number | null, max: number | null): string {
+  if (min === null || max === null) return "";
+  return `₹${min.toLocaleString("en-IN")} – ₹${max.toLocaleString("en-IN")}`;
 }
 
-function formatDate(d: string): string {
+function formatDate(d: string | null): string {
   if (!d) return "";
   const date = new Date(d);
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -87,6 +89,9 @@ const TripRoom = () => {
   const [deadlinesData, setDeadlinesData] = useState<any[]>([]);
   const [readinessV2, setReadinessV2] = useState(0);
 
+  // Setup panel
+  const [setupDismissed, setSetupDismissed] = useState(false);
+
   const [version, toggleVersion] = useVersionToggle();
 
   const tokens = joinToken ? getTokens(joinToken) : null;
@@ -120,7 +125,7 @@ const TripRoom = () => {
     fetchTrip();
   }, [fetchTrip]);
 
-  // Supabase Realtime — subscribe to vote, member, and v2 table changes
+  // Supabase Realtime — subscribe to vote, member, trip, and v2 table changes
   useEffect(() => {
     if (!supabase || !trip?.id) return;
 
@@ -134,6 +139,11 @@ const TripRoom = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "trip_members", filter: `trip_id=eq.${trip.id}` },
+        () => fetchTrip()
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "trips", filter: `id=eq.${trip.id}` },
         () => fetchTrip()
       )
       .on(
@@ -265,6 +275,24 @@ const TripRoom = () => {
         : ("none" as const),
   }));
 
+  // Setup panel visibility
+  const showSetupPanel = isOrganiser && !setupDismissed && (
+    trip.budget_min === null || trip.travel_from === null || destinations.length === 0
+  );
+
+  // Non-organiser sees placeholder when trip is not yet set up
+  const tripNotReady = trip.budget_min === null;
+
+  // Header subtitle parts
+  const headerParts: string[] = [];
+  if (trip.budget_min !== null && trip.budget_max !== null) {
+    headerParts.push(formatCost(trip.budget_min, trip.budget_max));
+  }
+  if (trip.travel_from && trip.travel_to) {
+    headerParts.push(`${formatDate(trip.travel_from)}–${formatDate(trip.travel_to)}`);
+  }
+  headerParts.push(`${members.length} people`);
+
   return (
     <div className="min-h-screen relative z-10">
       <Header />
@@ -275,9 +303,11 @@ const TripRoom = () => {
             <h1 className="font-display text-[32px] md:text-[36px] font-bold leading-[1.05] text-t-primary">
               {trip.name}
             </h1>
-            <p className="font-mono text-[13px] text-t-secondary mt-1.5">
-              {formatCost(trip.budget_min, trip.budget_max)}  ·  {formatDate(trip.travel_from)}–{formatDate(trip.travel_to)}  ·  {members.length} people
-            </p>
+            {headerParts.length > 0 && (
+              <p className="font-mono text-[13px] text-t-secondary mt-1.5">
+                {headerParts.join("  ·  ")}
+              </p>
+            )}
           </div>
           <div className="flex gap-3 mt-4 md:mt-0">
             {/* Version toggle */}
@@ -311,8 +341,30 @@ const TripRoom = () => {
           </div>
         </div>
 
-        {/* V1 sections */}
-        {version === "v1" && (
+        {/* Organiser setup panel */}
+        {showSetupPanel && joinToken && (
+          <div className="mt-10">
+            <OrganiserSetupPanel
+              joinToken={joinToken}
+              trip={trip}
+              onTripUpdated={fetchTrip}
+              onComplete={() => setSetupDismissed(true)}
+            />
+          </div>
+        )}
+
+        {/* Non-organiser placeholder when trip isn't set up yet */}
+        {!isOrganiser && tripNotReady && (
+          <div className="mt-16 text-center">
+            <p className="font-ui font-light text-t-secondary">
+              The organiser is still setting up the trip.<br />
+              Check back in a moment.
+            </p>
+          </div>
+        )}
+
+        {/* V1 sections — only when setup is complete (or non-organiser with trip ready) */}
+        {version === "v1" && !showSetupPanel && !tripNotReady && (
           <>
             {/* Readiness */}
             <div className="section-divider mt-12">
@@ -427,26 +479,30 @@ const TripRoom = () => {
             </div>
 
             {/* Budget */}
-            <div className="section-divider mt-12">
-              <span>Budget</span>
-            </div>
-            <p className="font-display text-[28px] font-bold text-t-primary mb-4">
-              {formatCost(trip.budget_min, trip.budget_max)}
-            </p>
-            {budgetConfirmed ? (
-              <p className="font-ui text-sm text-green flex items-center gap-2">
-                <span>✓</span> You've confirmed the budget
-              </p>
-            ) : (
-              <Button variant="outline-strong" onClick={handleConfirm}>
-                I'm okay with this budget
-              </Button>
+            {trip.budget_min !== null && trip.budget_max !== null && (
+              <>
+                <div className="section-divider mt-12">
+                  <span>Budget</span>
+                </div>
+                <p className="font-display text-[28px] font-bold text-t-primary mb-4">
+                  {formatCost(trip.budget_min, trip.budget_max)}
+                </p>
+                {budgetConfirmed ? (
+                  <p className="font-ui text-sm text-green flex items-center gap-2">
+                    <span>✓</span> You've confirmed the budget
+                  </p>
+                ) : (
+                  <Button variant="outline-strong" onClick={handleConfirm}>
+                    I'm okay with this budget
+                  </Button>
+                )}
+              </>
             )}
           </>
         )}
 
-        {/* V2 sections */}
-        {version === "v2" && joinToken && (
+        {/* V2 sections — only when setup is complete */}
+        {version === "v2" && !showSetupPanel && !tripNotReady && joinToken && (
           <TripRoomV2Sections
             joinToken={joinToken}
             trip={trip}

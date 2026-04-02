@@ -18,7 +18,7 @@ create table if not exists budget_preferences (
   unique (trip_id, member_id)
 );
 
-create index idx_budget_preferences_trip on budget_preferences (trip_id);
+create index if not exists idx_budget_preferences_trip on budget_preferences (trip_id);
 
 -- ─── Budget Estimates (AI-generated) ────────────────────────────────────────
 create table if not exists budget_estimates (
@@ -46,7 +46,7 @@ create table if not exists availability_slots (
   unique (trip_id, member_id, slot_date)
 );
 
-create index idx_availability_slots_trip on availability_slots (trip_id);
+create index if not exists idx_availability_slots_trip on availability_slots (trip_id);
 
 -- ─── Travel Windows (AI-generated) ──────────────────────────────────────────
 create table if not exists travel_windows (
@@ -70,9 +70,29 @@ create table if not exists deadlines (
   unique (trip_id, item_type)
 );
 
-create index idx_deadlines_trip on deadlines (trip_id);
+create index if not exists idx_deadlines_trip on deadlines (trip_id);
 
--- ─── Realtime publications ──────────────────────────────────────────────────
-alter publication supabase_realtime add table budget_preferences;
-alter publication supabase_realtime add table availability_slots;
-alter publication supabase_realtime add table deadlines;
+-- ─── Realtime publications (idempotent) ─────────────────────────────────────
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'budget_preferences'
+  ) then
+    alter publication supabase_realtime add table budget_preferences;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'availability_slots'
+  ) then
+    alter publication supabase_realtime add table availability_slots;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'deadlines'
+  ) then
+    alter publication supabase_realtime add table deadlines;
+  end if;
+end $$;
