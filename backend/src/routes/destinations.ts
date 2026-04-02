@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
+import { getDestinationSummary } from '../lib/gemini';
 import { loadTrip, requireMember, requireOrganiser } from '../middleware/tokens';
 
 const router = Router({ mergeParams: true });
@@ -54,6 +55,38 @@ router.post('/', loadTrip, requireOrganiser, async (req, res) => {
   if (error) return res.status(500).json({ error: 'Failed to add destination' });
 
   res.status(201).json({ destination: data });
+});
+
+// POST /api/trips/:joinToken/destinations/summary
+router.post('/summary', loadTrip, async (req, res) => {
+  const trip = (req as any).trip;
+  const { query, source } = req.body;
+
+  if (!source || !['search', 'ai'].includes(source)) {
+    return res.status(400).json({ error: 'source must be "search" or "ai"' });
+  }
+  if (source === 'search' && !query) {
+    return res.status(400).json({ error: 'query is required for search mode' });
+  }
+
+  const groupSize = trip.group_size ?? 4;
+  const nights = trip.travel_from && trip.travel_to
+    ? Math.max(1, Math.ceil((new Date(trip.travel_to).getTime() - new Date(trip.travel_from).getTime()) / 86400000))
+    : 3;
+
+  try {
+    const result = await getDestinationSummary({
+      query: query || null,
+      source,
+      groupSize,
+      nights,
+      budgetMin: trip.budget_min ?? undefined,
+      budgetMax: trip.budget_max ?? undefined,
+    });
+    res.json(result);
+  } catch {
+    res.status(503).json({ error: 'AI unavailable. Try searching manually.' });
+  }
 });
 
 // POST /api/trips/:joinToken/destinations/:destId/vote

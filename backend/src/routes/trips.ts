@@ -16,6 +16,7 @@ router.post('/', async (req, res) => {
       travel_to,
       deadline,
       organiser_name,
+      group_size,
     } = req.body;
 
     if (!name || !organiser_name) {
@@ -33,6 +34,9 @@ router.post('/', async (req, res) => {
     if (travel_from && travel_to && travel_from > travel_to) {
       return res.status(400).json({ error: 'travel_from must be before or equal to travel_to' });
     }
+    if (group_size != null && (!Number.isInteger(Number(group_size)) || Number(group_size) < 2 || Number(group_size) > 30)) {
+      return res.status(400).json({ error: 'group_size must be an integer between 2 and 30' });
+    }
 
     const organiser_token = generateOrganiserToken();
     const member_token    = generateMemberToken();
@@ -45,6 +49,7 @@ router.post('/', async (req, res) => {
     if (travel_from)         tripData.travel_from = travel_from;
     if (travel_to)           tripData.travel_to   = travel_to;
     if (deadline)            tripData.deadline    = deadline;
+    if (group_size != null)  tripData.group_size  = Number(group_size);
 
     // Retry once on join_token collision (extremely rare but possible)
     const { data: trip, error } = await supabase
@@ -110,14 +115,16 @@ router.post('/', async (req, res) => {
 // PATCH /api/trips/:joinToken — organiser updates trip details (budget, dates, deadline)
 router.patch('/:joinToken', loadTrip, requireOrganiser, async (req, res) => {
   const trip = (req as any).trip;
-  const { budget_min, budget_max, travel_from, travel_to, deadline } = req.body;
+  const { budget_min, budget_max, travel_from, travel_to, deadline, selected_destination_id, destination_summary } = req.body;
 
   const updates: Record<string, any> = {};
-  if (budget_min  !== undefined) updates.budget_min  = budget_min;
-  if (budget_max  !== undefined) updates.budget_max  = budget_max;
-  if (travel_from !== undefined) updates.travel_from = travel_from;
-  if (travel_to   !== undefined) updates.travel_to   = travel_to;
-  if (deadline    !== undefined) updates.deadline    = deadline;
+  if (budget_min                !== undefined) updates.budget_min                = budget_min;
+  if (budget_max                !== undefined) updates.budget_max                = budget_max;
+  if (travel_from               !== undefined) updates.travel_from               = travel_from;
+  if (travel_to                 !== undefined) updates.travel_to                 = travel_to;
+  if (deadline                  !== undefined) updates.deadline                  = deadline;
+  if (selected_destination_id   !== undefined) updates.selected_destination_id   = selected_destination_id;
+  if (destination_summary       !== undefined) updates.destination_summary       = destination_summary;
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });

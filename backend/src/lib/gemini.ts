@@ -154,6 +154,128 @@ Return up to 3 windows sorted by score descending. If fewer than 3 viable window
   }
 }
 
+// ─── Destination Summary (search + AI suggest) ─────────────────────────────
+
+export interface DestinationSummaryResult {
+  suggestions?: string[];
+  destination?: {
+    name: string;
+    tagline: string;
+    highlights: string[];
+    watch_out: string[];
+    cost_breakdown: {
+      flights_min: number;
+      flights_max: number;
+      hotel_per_night_min: number;
+      hotel_per_night_max: number;
+      food_per_day_min: number;
+      food_per_day_max: number;
+      activities_min: number;
+      activities_max: number;
+      total_min: number;
+      total_max: number;
+    };
+    nights: number;
+  };
+}
+
+export async function getDestinationSummary(params: {
+  query: string | null;
+  source: 'search' | 'ai';
+  groupSize: number;
+  nights: number;
+  budgetMin?: number;
+  budgetMax?: number;
+}): Promise<DestinationSummaryResult> {
+
+  const budgetContext = params.budgetMin && params.budgetMax
+    ? `The group's budget is ₹${params.budgetMin.toLocaleString('en-IN')} – ₹${params.budgetMax.toLocaleString('en-IN')} per person.`
+    : '';
+
+  if (params.source === 'ai' && !params.query) {
+    const prompt = `You are a travel expert for Indian domestic group travel.
+
+Group size: ${params.groupSize} people
+Trip duration: ${params.nights} nights
+${budgetContext}
+
+Suggest exactly 3 destination names for this group. Just the names, no explanation.
+
+Return ONLY valid JSON, no markdown fences:
+{ "suggestions": ["Destination 1", "Destination 2", "Destination 3"] }`;
+
+    try {
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      return JSON.parse(clean);
+    } catch (err) {
+      console.error('Gemini destination suggest error:', err);
+      throw new Error('AI_UNAVAILABLE');
+    }
+  }
+
+  const destination = params.query!;
+
+  const prompt = `You are a travel expert for Indian domestic group travel.
+
+Destination: ${destination}
+Group size: ${params.groupSize} people
+Trip duration: ${params.nights} nights
+${budgetContext}
+
+Generate a destination summary AND realistic cost breakdown for this trip.
+
+IMPORTANT for cost breakdown:
+- Flights: estimate round-trip economy class per person from a Tier 1 Indian city (Mumbai/Delhi/Bangalore). If destination is driveable (<6hr), flights_min and flights_max can be 0.
+- Hotel: per person per night sharing a room (divide room rate by 2). Use mid-range as the baseline.
+- Food: per person per day including all meals. Include one nice dinner per trip.
+- Activities: total per person for the entire trip, not per day.
+- All totals = (flights) + (hotel × ${params.nights}) + (food × ${params.nights}) + activities
+- Be realistic. Do not underestimate.
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "destination": {
+    "name": "string",
+    "tagline": "one honest, punchy sentence — not a tourism tagline",
+    "highlights": ["string", "string", "string"],
+    "watch_out": ["string", "string"],
+    "cost_breakdown": {
+      "flights_min": number,
+      "flights_max": number,
+      "hotel_per_night_min": number,
+      "hotel_per_night_max": number,
+      "food_per_day_min": number,
+      "food_per_day_max": number,
+      "activities_min": number,
+      "activities_max": number,
+      "total_min": number,
+      "total_max": number
+    },
+    "nights": ${params.nights}
+  }
+}
+
+All amounts in INR per person.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    if (!parsed.destination || !parsed.destination.cost_breakdown) {
+      throw new Error('Unexpected Gemini response shape');
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error('Gemini destination summary error:', err);
+    throw new Error('AI_UNAVAILABLE');
+  }
+}
+
 // ─── Destination Suggestions ────────────────────────────────────────────────
 
 export async function getDestinationSuggestions(params: {

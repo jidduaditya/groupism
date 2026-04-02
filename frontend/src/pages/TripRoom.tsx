@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
-import DestinationCard from "@/components/DestinationCard";
-import ReadinessBar from "@/components/ReadinessBar";
-import OrganiserSetupPanel from "@/components/OrganiserSetupPanel";
-import TripRoomV2Sections from "@/components/v2/TripRoomV2Sections";
-import { Button } from "@/components/ui/button";
+import MemberCirclesRow from "@/components/MemberCirclesRow";
+import DestinationSearchCard from "@/components/DestinationSearchCard";
+import BudgetDropdowns from "@/components/BudgetDropdowns";
+import AvailabilityCalendar from "@/components/AvailabilityCalendar";
+import PersonalPreferencesCard from "@/components/PersonalPreferencesCard";
 import { cn } from "@/lib/utils";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
-import { useVersionToggle } from "@/hooks/useVersionToggle";
 
 interface Member {
   id: string;
@@ -19,20 +18,6 @@ interface Member {
   has_confirmed: boolean;
   confirmed_at: string | null;
   joined_at: string;
-}
-
-interface Destination {
-  id: string;
-  name: string;
-  tagline: string;
-  votes: number;
-  pros: string[];
-  cons: string[];
-  best_for: string;
-  estimated_cost_min: number;
-  estimated_cost_max: number;
-  source: string;
-  voter_member_ids?: string[];
 }
 
 interface TripData {
@@ -44,6 +29,9 @@ interface TripData {
   travel_from: string | null;
   travel_to: string | null;
   deadline: string | null;
+  group_size: number;
+  selected_destination_id: string | null;
+  destination_summary: any | null;
 }
 
 function formatCost(min: number | null, max: number | null): string {
@@ -57,42 +45,15 @@ function formatDate(d: string | null): string {
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-function isWithin3Days(d: string): boolean {
-  if (!d) return false;
-  const deadline = new Date(d);
-  const now = new Date();
-  const diff = deadline.getTime() - now.getTime();
-  return diff >= 0 && diff <= 3 * 24 * 60 * 60 * 1000;
-}
-
-function initials(name: string): string {
-  return name.slice(0, 2).toUpperCase();
-}
-
 const TripRoom = () => {
   const { id: joinToken } = useParams<{ id: string }>();
   const [trip, setTrip] = useState<TripData | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [destinations, setDestinations] = useState<Destination[]>([]);
-  const [readiness, setReadiness] = useState(0);
+  const [budgetPrefs, setBudgetPrefs] = useState<any[]>([]);
+  const [availSlots, setAvailSlots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [addingDest, setAddingDest] = useState(false);
-  const [newDestName, setNewDestName] = useState("");
-
-  // V2 state
-  const [budgetPrefs, setBudgetPrefs] = useState<any[]>([]);
-  const [budgetEstimate, setBudgetEstimate] = useState<any>(null);
-  const [availSlots, setAvailSlots] = useState<any[]>([]);
-  const [travelWindows, setTravelWindows] = useState<any>(null);
-  const [deadlinesData, setDeadlinesData] = useState<any[]>([]);
-  const [readinessV2, setReadinessV2] = useState(0);
-
-  // Setup panel
-  const [setupDismissed, setSetupDismissed] = useState(false);
-
-  const [version, toggleVersion] = useVersionToggle();
 
   const tokens = joinToken ? getTokens(joinToken) : null;
   const isOrganiser = !!tokens?.organiserToken;
@@ -104,15 +65,8 @@ const TripRoom = () => {
       const data = await api.get(`/api/trips/${joinToken}`);
       setTrip(data.trip);
       setMembers(data.members);
-      setDestinations(data.destinations);
-      setReadiness(data.readiness_score);
-      // V2 fields
       setBudgetPrefs(data.budget_preferences ?? []);
-      setBudgetEstimate(data.budget_estimate ?? null);
       setAvailSlots(data.availability_slots ?? []);
-      setTravelWindows(data.travel_windows ?? null);
-      setDeadlinesData(data.deadlines ?? []);
-      setReadinessV2(data.readiness_v2 ?? 0);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Trip not found");
@@ -125,7 +79,7 @@ const TripRoom = () => {
     fetchTrip();
   }, [fetchTrip]);
 
-  // Supabase Realtime — subscribe to vote, member, trip, and v2 table changes
+  // Supabase Realtime
   useEffect(() => {
     if (!supabase || !trip?.id) return;
 
@@ -156,11 +110,6 @@ const TripRoom = () => {
         { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
         () => fetchTrip()
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "deadlines", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
-      )
       .subscribe();
 
     return () => {
@@ -177,46 +126,14 @@ const TripRoom = () => {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [fetchTrip]);
 
-  const handleVote = async (destId: string) => {
-    if (!joinToken) return;
-    try {
-      await api.post(`/api/trips/${joinToken}/destinations/${destId}/vote`, {}, joinToken);
-      await fetchTrip();
-    } catch (err: any) {
-      toast({ title: "Vote failed", description: err.message, variant: "destructive" });
-    }
-  };
-
   const handleConfirm = async () => {
     if (!joinToken) return;
     try {
       await api.post(`/api/trips/${joinToken}/confirm`, {}, joinToken);
       await fetchTrip();
-      toast({ title: "Confirmed" });
+      toast({ title: "You're in!" });
     } catch (err: any) {
       toast({ title: "Confirm failed", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleNudge = async () => {
-    if (!joinToken) return;
-    try {
-      const res = await api.post(`/api/trips/${joinToken}/nudge`, {}, joinToken);
-      toast({ title: "Nudge sent", description: res.message });
-    } catch (err: any) {
-      toast({ title: "Nudge failed", description: err.message, variant: "destructive" });
-    }
-  };
-
-  const handleAddDestination = async () => {
-    if (!joinToken || !newDestName.trim()) return;
-    try {
-      await api.post(`/api/trips/${joinToken}/destinations`, { name: newDestName.trim() }, joinToken);
-      setNewDestName("");
-      setAddingDest(false);
-      await fetchTrip();
-    } catch (err: any) {
-      toast({ title: "Failed to add destination", description: err.message, variant: "destructive" });
     }
   };
 
@@ -227,6 +144,7 @@ const TripRoom = () => {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen relative z-10">
@@ -238,6 +156,7 @@ const TripRoom = () => {
     );
   }
 
+  // Error state
   if (error || !trip) {
     return (
       <div className="min-h-screen relative z-10">
@@ -250,40 +169,17 @@ const TripRoom = () => {
     );
   }
 
-  const unresponded = members.filter((m) => !m.has_confirmed).length;
-  const maxVotes = destinations.length > 0 ? Math.max(...destinations.map((d) => d.votes)) : 0;
-
-  // Build set of member IDs who have voted on any destination
-  const votedMemberIds = new Set<string>();
-  for (const d of destinations) {
-    for (const mid of d.voter_member_ids || []) {
-      votedMemberIds.add(mid);
-    }
-  }
-
-  // Current user's member record and budget confirm state
+  // Derived state
   const myMember = members.find((m) => m.id === currentMemberId);
-  const budgetConfirmed = myMember?.has_confirmed || false;
+  const hasConfirmed = myMember?.has_confirmed || false;
 
-  // Map members for ReadinessBar with 3 states
-  const readinessMembers = members.map((m) => ({
-    name: m.display_name,
-    status: m.has_confirmed
-      ? ("confirmed" as const)
-      : votedMemberIds.has(m.id)
-        ? ("voted" as const)
-        : ("none" as const),
-  }));
+  const card2Enabled = trip.selected_destination_id !== null;
+  const card3Enabled = trip.budget_min !== null;
 
-  // Setup panel visibility
-  const showSetupPanel = isOrganiser && !setupDismissed && (
-    trip.budget_min === null || trip.travel_from === null || destinations.length === 0
-  );
+  // Current user's existing budget preferences
+  const myPrefs = budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
 
-  // Non-organiser sees placeholder when trip is not yet set up
-  const tripNotReady = trip.budget_min === null;
-
-  // Header subtitle parts
+  // Header subtitle
   const headerParts: string[] = [];
   if (trip.budget_min !== null && trip.budget_max !== null) {
     headerParts.push(formatCost(trip.budget_min, trip.budget_max));
@@ -296,9 +192,9 @@ const TripRoom = () => {
   return (
     <div className="min-h-screen relative z-10">
       <Header />
-      <div className="max-w-2xl mx-auto px-6 pt-24 pb-20">
-        {/* Header — shared between v1 and v2 */}
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-2">
+      <div className="max-w-2xl mx-auto px-6 pt-24 pb-32">
+        {/* Trip header */}
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-6">
           <div>
             <h1 className="font-display text-[32px] md:text-[36px] font-bold leading-[1.05] text-t-primary">
               {trip.name}
@@ -309,224 +205,96 @@ const TripRoom = () => {
               </p>
             )}
           </div>
-          <div className="flex gap-3 mt-4 md:mt-0">
-            {/* Version toggle */}
-            <div className="flex h-9 rounded-[4px] border border-b-mid overflow-hidden">
-              <button
-                onClick={version === "v2" ? toggleVersion : undefined}
-                className={cn(
-                  "px-3 font-mono text-xs transition-all",
-                  version === "v1"
-                    ? "bg-amber text-[#1c1a15] font-medium"
-                    : "bg-surface text-t-secondary hover:bg-hover"
-                )}
-              >
-                v1
-              </button>
-              <button
-                onClick={version === "v1" ? toggleVersion : undefined}
-                className={cn(
-                  "px-3 font-mono text-xs transition-all",
-                  version === "v2"
-                    ? "bg-amber text-[#1c1a15] font-medium"
-                    : "bg-surface text-t-secondary hover:bg-hover"
-                )}
-              >
-                v2
-              </button>
-            </div>
-            <Button variant="outline-strong" size="sm" onClick={handleCopyInvite}>
-              {copied ? "Copied!" : "Copy Link"}
-            </Button>
-          </div>
+          <button
+            onClick={handleCopyInvite}
+            className="mt-4 md:mt-0 h-9 px-4 rounded-[4px] border border-b-mid font-ui text-sm text-t-secondary hover:bg-hover transition-all"
+          >
+            {copied ? "Copied!" : "Share link"}
+          </button>
         </div>
 
-        {/* Organiser setup panel */}
-        {showSetupPanel && joinToken && (
-          <div className="mt-10">
-            <OrganiserSetupPanel
-              joinToken={joinToken}
-              trip={trip}
-              onTripUpdated={fetchTrip}
-              onComplete={() => setSetupDismissed(true)}
-            />
-          </div>
-        )}
+        {/* Member circles */}
+        <MemberCirclesRow
+          members={members}
+          groupSize={trip.group_size || members.length}
+          currentMemberId={currentMemberId}
+        />
 
-        {/* Non-organiser placeholder when trip isn't set up yet */}
-        {!isOrganiser && tripNotReady && (
-          <div className="mt-16 text-center">
-            <p className="font-ui font-light text-t-secondary">
-              The organiser is still setting up the trip.<br />
-              Check back in a moment.
+        {/* Card 1 — Destination */}
+        <div className="mt-8">
+          <DestinationSearchCard
+            joinToken={joinToken!}
+            trip={trip}
+            isOrganiser={isOrganiser}
+            onTripUpdated={fetchTrip}
+          />
+        </div>
+
+        {/* Budget mismatch warning */}
+        {trip.destination_summary?.cost_breakdown && trip.budget_max !== null &&
+          trip.budget_max < trip.destination_summary.cost_breakdown.total_min && (
+          <div className="mt-4 bg-[rgba(181,80,58,0.12)] border border-terra rounded-[4px] p-4">
+            <p className="font-ui text-sm text-terra">
+              ⚠ Your budget (₹{trip.budget_max.toLocaleString("en-IN")}) may be tight for{" "}
+              {trip.destination_summary.name || "this destination"} (est. from ₹
+              {trip.destination_summary.cost_breakdown.total_min.toLocaleString("en-IN")}). Consider
+              adjusting your budget or choosing a different destination.
             </p>
           </div>
         )}
 
-        {/* V1 sections — only when setup is complete (or non-organiser with trip ready) */}
-        {version === "v1" && !showSetupPanel && !tripNotReady && (
-          <>
-            {/* Readiness */}
-            <div className="section-divider mt-12">
-              <span>Trip Readiness — <span className="font-mono text-amber">{readiness}%</span></span>
-            </div>
-            <ReadinessBar members={readinessMembers} />
+        {/* Card 2 — Budget */}
+        <div className="mt-6">
+          <BudgetDropdowns
+            joinToken={joinToken!}
+            trip={trip}
+            isOrganiser={isOrganiser}
+            onTripUpdated={fetchTrip}
+            disabled={!card2Enabled}
+          />
+        </div>
 
-            {/* Deadline */}
-            {trip.deadline && (
-              <p
-                className={cn(
-                  "mt-3 font-ui text-sm",
-                  isWithin3Days(trip.deadline) ? "text-terra font-medium" : "text-t-secondary"
-                )}
-              >
-                Confirm by {formatDate(trip.deadline)}
-                {isWithin3Days(trip.deadline) && " — deadline approaching"}
-              </p>
-            )}
-
-            {isOrganiser && unresponded > 0 && (
-              <p className="mt-3 font-ui text-sm text-terra">
-                {unresponded} people haven't confirmed yet.{" "}
-                <button
-                  className="underline hover:no-underline transition-all"
-                  onClick={handleNudge}
-                >
-                  Nudge them →
-                </button>
-              </p>
-            )}
-
-            {/* Destinations */}
-            <div className="section-divider mt-12">
-              <span>Where are we going</span>
-            </div>
-            {destinations.length === 0 ? (
-              <p className="font-ui text-sm text-t-tertiary py-4">No destinations yet. Add one or use AI suggestions.</p>
-            ) : (
-              <div className="divide-y divide-b-subtle">
-                {destinations.map((d) => {
-                  const hasVoted = currentMemberId
-                    ? (d.voter_member_ids || []).includes(currentMemberId)
-                    : false;
-                  return (
-                    <DestinationCard
-                      key={d.id}
-                      id={d.id}
-                      name={d.name}
-                      tagline={d.tagline || ""}
-                      votes={d.votes}
-                      pros={d.pros || []}
-                      cons={d.cons || []}
-                      bestFor={d.best_for || ""}
-                      estCost={formatCost(d.estimated_cost_min, d.estimated_cost_max)}
-                      hasVoted={hasVoted}
-                      isWinning={d.votes === maxVotes && d.votes > 0}
-                      onVote={() => handleVote(d.id)}
-                    />
-                  );
-                })}
-              </div>
-            )}
-
-            {isOrganiser && !addingDest && (
-              <button
-                className="mt-4 font-ui text-sm text-t-secondary hover:text-t-primary transition-colors"
-                onClick={() => setAddingDest(true)}
-              >
-                + Add your own destination
-              </button>
-            )}
-
-            {addingDest && (
-              <div className="mt-4 flex gap-3">
-                <input
-                  type="text"
-                  value={newDestName}
-                  onChange={(e) => setNewDestName(e.target.value)}
-                  placeholder="Destination name"
-                  className="flex-1 h-11 px-3 bg-surface border border-b-mid rounded-[4px] text-t-primary font-ui text-sm focus:outline-none focus:border-t-secondary transition-colors"
-                  onKeyDown={(e) => e.key === "Enter" && handleAddDestination()}
-                />
-                <Button variant="amber" size="sm" onClick={handleAddDestination} disabled={!newDestName.trim()}>
-                  Add
-                </Button>
-                <Button variant="outline-strong" size="sm" onClick={() => setAddingDest(false)}>
-                  Cancel
-                </Button>
-              </div>
-            )}
-
-            {/* Members */}
-            <div className="section-divider mt-12">
-              <span>Who's in</span>
-            </div>
-            <div className="flex flex-wrap gap-4">
-              {members.map((member) => (
-                <div key={member.id} className="flex flex-col items-center gap-1.5">
-                  <div
-                    className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center font-ui text-xs font-medium bg-elevated text-t-primary transition-all",
-                      member.has_confirmed && "ring-2 ring-green",
-                      !member.has_confirmed && "opacity-40"
-                    )}
-                  >
-                    {initials(member.display_name)}
-                  </div>
-                  <span className="font-ui text-xs text-t-secondary">{member.display_name}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Budget */}
-            {trip.budget_min !== null && trip.budget_max !== null && (
-              <>
-                <div className="section-divider mt-12">
-                  <span>Budget</span>
-                </div>
-                <p className="font-display text-[28px] font-bold text-t-primary mb-4">
-                  {formatCost(trip.budget_min, trip.budget_max)}
-                </p>
-                {budgetConfirmed ? (
-                  <p className="font-ui text-sm text-green flex items-center gap-2">
-                    <span>✓</span> You've confirmed the budget
-                  </p>
-                ) : (
-                  <Button variant="outline-strong" onClick={handleConfirm}>
-                    I'm okay with this budget
-                  </Button>
-                )}
-              </>
-            )}
-          </>
-        )}
-
-        {/* V2 sections — only when setup is complete */}
-        {version === "v2" && !showSetupPanel && !tripNotReady && joinToken && (
-          <TripRoomV2Sections
-            joinToken={joinToken}
+        {/* Card 3 — Availability */}
+        <div className="mt-6">
+          <AvailabilityCalendar
+            joinToken={joinToken!}
             trip={trip}
             members={members}
-            destinations={destinations}
-            budgetPrefs={budgetPrefs}
-            budgetEstimate={budgetEstimate}
             availSlots={availSlots}
-            travelWindows={travelWindows}
-            deadlines={deadlinesData}
-            readinessV2={readinessV2}
-            isOrganiser={isOrganiser}
             currentMemberId={currentMemberId}
-            onRefresh={fetchTrip}
-            onVote={handleVote}
-            onConfirm={handleConfirm}
-            onAddDestination={handleAddDestination}
-            addingDest={addingDest}
-            setAddingDest={setAddingDest}
-            newDestName={newDestName}
-            setNewDestName={setNewDestName}
-            budgetConfirmed={budgetConfirmed}
+            isOrganiser={isOrganiser}
+            onTripUpdated={fetchTrip}
+            disabled={!card3Enabled}
           />
-        )}
+        </div>
+
+        {/* Card 4 — Personal Preferences */}
+        <div className="mt-6">
+          <PersonalPreferencesCard
+            joinToken={joinToken!}
+            existingPrefs={myPrefs}
+            onRefresh={fetchTrip}
+          />
+        </div>
+      </div>
+
+      {/* Sticky "I'm in" button */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--bg-base)]/90 backdrop-blur-sm border-t border-b-subtle z-20">
+        <div className="max-w-2xl mx-auto">
+          {!hasConfirmed ? (
+            <button
+              onClick={handleConfirm}
+              className="w-full h-16 bg-amber text-[#1c1a15] font-display font-bold text-2xl rounded-[4px] tracking-tight hover:bg-amber-light active:scale-[0.98] transition-transform"
+            >
+              I'm in
+            </button>
+          ) : (
+            <div className="w-full h-16 flex items-center justify-center gap-3 border border-green rounded-[4px]">
+              <span className="text-green font-mono text-lg">✓</span>
+              <span className="font-display text-xl text-green">You're in</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

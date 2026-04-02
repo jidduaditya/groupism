@@ -18,6 +18,7 @@ const CreateTrip = () => {
       const trip = await api.post("/api/trips", {
         name: tripName,
         organiser_name: organiserName || "Organiser",
+        group_size: groupSize,
       });
 
       setTokens(trip.join_token, {

@@ -11,10 +11,40 @@ const VALID_TIERS = ['unavailable', 'free', 'could_work'];
 router.post('/', loadTrip, requireMember, async (req, res) => {
   const trip = (req as any).trip;
   const member = (req as any).member;
-  const { slots } = req.body;
+  const { slot, slots } = req.body;
 
+  // Single-slot upsert mode
+  if (slot) {
+    if (!slot.date) {
+      return res.status(400).json({ error: 'slot.date is required' });
+    }
+    if (slot.tier === null) {
+      // Clear this date for this member
+      const { error } = await supabase
+        .from('availability_slots')
+        .delete()
+        .eq('trip_id', trip.id)
+        .eq('member_id', member.id)
+        .eq('slot_date', slot.date);
+      if (error) return res.status(500).json({ error: 'Failed to clear slot' });
+      return res.json({ saved: 1, cleared: true });
+    }
+    if (!VALID_TIERS.includes(slot.tier)) {
+      return res.status(400).json({ error: 'slot.tier must be unavailable, free, or could_work' });
+    }
+    const { error } = await supabase
+      .from('availability_slots')
+      .upsert(
+        { trip_id: trip.id, member_id: member.id, slot_date: slot.date, tier: slot.tier },
+        { onConflict: 'trip_id,member_id,slot_date' }
+      );
+    if (error) return res.status(500).json({ error: 'Failed to save slot' });
+    return res.json({ saved: 1 });
+  }
+
+  // Batch replacement mode (existing behavior)
   if (!Array.isArray(slots) || slots.length === 0) {
-    return res.status(400).json({ error: 'slots must be a non-empty array' });
+    return res.status(400).json({ error: 'slots must be a non-empty array, or provide a single slot object' });
   }
 
   for (const slot of slots) {
