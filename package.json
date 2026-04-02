@@ -1,0 +1,10 @@
+{
+  "name": "triphaus",
+  "private": true,
+  "scripts": {
+    "postinstall": "cd backend && npm install --include=dev",
+    "build": "cd backend && npm run build",
+    "start": "cd backend && npm start"
+  },
+  "engines": { "node": ">=20" }
+}
