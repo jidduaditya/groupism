@@ -39,6 +39,7 @@ export default function BudgetDropdowns({
   isOrganiser,
   onTripUpdated,
   disabled,
+  deadline,
 }: BudgetDropdownsProps) {
   const [budgetMin, setBudgetMin] = useState<number | null>(
     trip.budget_min ?? null
