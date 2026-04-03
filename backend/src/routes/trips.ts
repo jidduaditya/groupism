@@ -156,6 +156,7 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     { data: availSlots },
     { data: travelWindows },
     { data: deadlines },
+    { data: groupInsights },
   ] = await Promise.all([
     supabase
       .from('trip_members')
@@ -194,6 +195,11 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
       .from('deadlines')
       .select('*')
       .eq('trip_id', trip.id),
+    supabase
+      .from('group_insights')
+      .select('*')
+      .eq('trip_id', trip.id)
+      .maybeSingle(),
   ]);
 
   // Auto-lock past-due deadlines
@@ -282,6 +288,7 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     travel_windows: travelWindows ?? null,
     deadlines: deadlines ?? [],
     readiness_v2: readinessV2,
+    group_insights: groupInsights ?? null,
   });
 });
 

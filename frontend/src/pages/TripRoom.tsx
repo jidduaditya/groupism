@@ -7,6 +7,8 @@ import DestinationSearchCard from "@/components/DestinationSearchCard";
 import BudgetCard from "@/components/BudgetCard";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import PersonalPreferencesCard from "@/components/PersonalPreferencesCard";
+import GroupInsightsPanel from "@/components/GroupInsightsPanel";
+import TripSummaryCard from "@/components/TripSummaryCard";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -75,6 +77,7 @@ const TripRoom = () => {
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [budgetEstimate, setBudgetEstimate] = useState<any>(null);
+  const [groupInsights, setGroupInsights] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -94,6 +97,7 @@ const TripRoom = () => {
       setDeadlines(data.deadlines ?? []);
       setDestinations(data.destinations ?? []);
       setBudgetEstimate(data.budget_estimate ?? null);
+      setGroupInsights(data.group_insights ?? null);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Trip not found");
@@ -146,6 +150,11 @@ const TripRoom = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
+        refetch
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "group_insights", filter: `trip_id=eq.${trip.id}` },
         refetch
       )
       .subscribe((status) => {
@@ -359,6 +368,17 @@ const TripRoom = () => {
           </div>
         )}
 
+        {/* Summary card */}
+        <div className="mt-6">
+          <TripSummaryCard
+            trip={trip}
+            destinations={destinations}
+            budgetPrefs={budgetPrefs}
+            groupInsights={groupInsights}
+            members={members}
+          />
+        </div>
+
         {/* Card 1 — Destination */}
         <div className="mt-8">
           <DestinationSearchCard
@@ -408,6 +428,15 @@ const TripRoom = () => {
           <PersonalPreferencesCard
             joinToken={joinToken!}
             existingPrefs={myPrefs}
+            onRefresh={fetchTrip}
+          />
+        </div>
+        {/* Group Insights */}
+        <div className="mt-6">
+          <GroupInsightsPanel
+            joinToken={joinToken!}
+            groupInsights={groupInsights}
+            prefsCount={budgetPrefs.length}
             onRefresh={fetchTrip}
           />
         </div>

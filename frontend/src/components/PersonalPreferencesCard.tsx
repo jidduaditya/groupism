@@ -10,9 +10,8 @@ interface PersonalPreferencesCardProps {
     accommodation_tier?: string;
     transport_pref?: string;
     dining_style?: string;
-    activities?: string[];
-    daily_budget_min?: number;
-    daily_budget_max?: number;
+    activity_categories?: string[];
+    activity_details?: string;
     notes?: string;
   } | null;
   onRefresh: () => void;
@@ -33,15 +32,12 @@ const DINING_OPTIONS = [
   { value: "mixed", label: "Mix" },
   { value: "restaurants", label: "Restaurants" },
 ];
-const ACTIVITY_OPTIONS = [
-  "Trekking",
-  "Beach",
-  "Nightlife",
-  "Sightseeing",
-  "Food tours",
-  "Spa",
-  "Adventure sports",
-  "None specific",
+
+const ACTIVITY_CATEGORIES = [
+  { value: "chill", label: "Chill", emoji: "\u{1F305}" },
+  { value: "shopping", label: "Shopping", emoji: "\u{1F6CD}\u{FE0F}" },
+  { value: "experiences", label: "Experiences", emoji: "\u{1F3AD}" },
+  { value: "exploration", label: "Exploration", emoji: "\u{1F9ED}" },
 ];
 
 export default function PersonalPreferencesCard({
@@ -58,27 +54,25 @@ export default function PersonalPreferencesCard({
   const [dining, setDining] = useState<string>(
     existingPrefs?.dining_style ?? ""
   );
-  const [activities, setActivities] = useState<string[]>(
-    existingPrefs?.activities ?? []
+  const [activityCategories, setActivityCategories] = useState<string[]>(
+    existingPrefs?.activity_categories ?? []
   );
-  const [dailyMin, setDailyMin] = useState<number | undefined>(
-    existingPrefs?.daily_budget_min
-  );
-  const [dailyMax, setDailyMax] = useState<number | undefined>(
-    existingPrefs?.daily_budget_max
+  const [activityDetails, setActivityDetails] = useState<string>(
+    existingPrefs?.activity_details ?? ""
   );
   const [notes, setNotes] = useState<string>(existingPrefs?.notes ?? "");
   const [savedVisible, setSavedVisible] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const detailDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = useRef(true);
+  const recognitionRef = useRef<any>(null);
 
-  const toggleActivity = (activity: string) => {
-    setActivities((prev) =>
-      prev.includes(activity)
-        ? prev.filter((a) => a !== activity)
-        : [...prev, activity]
+  const toggleCategory = (cat: string) => {
+    setActivityCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
     );
   };
 
@@ -87,9 +81,9 @@ export default function PersonalPreferencesCard({
       accommodation_tier: accommodation || undefined,
       transport_pref: transport || undefined,
       dining_style: dining || undefined,
-      activities: activities.length > 0 ? activities : undefined,
-      daily_budget_min: dailyMin,
-      daily_budget_max: dailyMax,
+      activity_categories:
+        activityCategories.length > 0 ? activityCategories : undefined,
+      activity_details: activityDetails || undefined,
       notes: notes || undefined,
     };
 
@@ -110,14 +104,14 @@ export default function PersonalPreferencesCard({
     accommodation,
     transport,
     dining,
-    activities,
-    dailyMin,
-    dailyMax,
+    activityCategories,
+    activityDetails,
     notes,
     joinToken,
     onRefresh,
   ]);
 
+  // 1s debounce for non-textarea fields
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -132,30 +126,65 @@ export default function PersonalPreferencesCard({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [accommodation, transport, dining, activities, dailyMin, dailyMax, notes, save]);
+  }, [accommodation, transport, dining, activityCategories, notes, save]);
+
+  // 1.5s debounce for detail textarea
+  useEffect(() => {
+    if (isInitialMount.current) return;
+
+    if (detailDebounceRef.current) clearTimeout(detailDebounceRef.current);
+    detailDebounceRef.current = setTimeout(() => {
+      save();
+    }, 1500);
+
+    return () => {
+      if (detailDebounceRef.current) clearTimeout(detailDebounceRef.current);
+    };
+  }, [activityDetails, save]);
 
   useEffect(() => {
     return () => {
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (detailDebounceRef.current) clearTimeout(detailDebounceRef.current);
     };
   }, []);
+
+  const startRecording = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setActivityDetails((prev) =>
+        prev ? `${prev} ${transcript}` : transcript
+      );
+    };
+    recognition.onend = () => setIsRecording(false);
+    recognition.onerror = () => setIsRecording(false);
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  };
+
+  const stopRecording = () => {
+    recognitionRef.current?.stop();
+    setIsRecording(false);
+  };
 
   const labelClass =
     "font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2 block";
 
-  const segmentedBtn = (
-    selected: boolean
-  ) =>
+  const segmentedBtn = (selected: boolean) =>
     cn(
       "h-[44px] px-4 rounded-[4px] text-sm transition-colors",
-      selected
-        ? "bg-amber text-[#1c1a15] font-medium"
-        : "bg-elevated text-t-secondary hover:bg-hover"
-    );
-
-  const pillBtn = (selected: boolean) =>
-    cn(
-      "rounded-full h-[36px] px-3 text-sm transition-colors",
       selected
         ? "bg-amber text-[#1c1a15] font-medium"
         : "bg-elevated text-t-secondary hover:bg-hover"
@@ -203,7 +232,9 @@ export default function PersonalPreferencesCard({
               key={opt.value}
               type="button"
               className={segmentedBtn(transport === opt.value)}
-              onClick={() => setTransport(transport === opt.value ? "" : opt.value)}
+              onClick={() =>
+                setTransport(transport === opt.value ? "" : opt.value)
+              }
             >
               {opt.label}
             </button>
@@ -220,7 +251,9 @@ export default function PersonalPreferencesCard({
               key={opt.value}
               type="button"
               className={segmentedBtn(dining === opt.value)}
-              onClick={() => setDining(dining === opt.value ? "" : opt.value)}
+              onClick={() =>
+                setDining(dining === opt.value ? "" : opt.value)
+              }
             >
               {opt.label}
             </button>
@@ -228,57 +261,70 @@ export default function PersonalPreferencesCard({
         </div>
       </div>
 
-      {/* Activities */}
+      {/* Activities — 4 category cards */}
       <div className="mb-5">
-        <label className={labelClass}>Activities</label>
-        <div className="flex gap-2 flex-wrap">
-          {ACTIVITY_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              className={pillBtn(activities.includes(opt))}
-              onClick={() => toggleActivity(opt)}
-            >
-              {opt}
-            </button>
-          ))}
+        <label className={labelClass}>What do you want to do?</label>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {ACTIVITY_CATEGORIES.map((cat) => {
+            const selected = activityCategories.includes(cat.value);
+            return (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => toggleCategory(cat.value)}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 h-[72px] rounded-[8px] transition-all",
+                  selected
+                    ? "border-2 border-amber bg-surface"
+                    : "bg-elevated border border-b-mid"
+                )}
+              >
+                <span className="text-xl">{cat.emoji}</span>
+                <span
+                  className={cn(
+                    "font-ui text-sm",
+                    selected ? "text-t-primary font-medium" : "text-t-secondary"
+                  )}
+                >
+                  {cat.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </div>
 
-      {/* Daily budget range */}
-      <div className="mb-5">
-        <label className={labelClass}>Daily budget range</label>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <span className="font-mono text-sm text-t-secondary">₹</span>
-            <input
-              type="number"
-              placeholder="Min"
-              className="w-28 h-11 px-3 bg-surface border border-b-mid rounded-[4px] text-t-primary font-mono text-sm focus:outline-none focus:border-t-secondary transition-colors"
-              value={dailyMin ?? ""}
-              onChange={(e) =>
-                setDailyMin(
-                  e.target.value ? Number(e.target.value) : undefined
-                )
-              }
+        {/* Detail textarea — shown when any category is selected */}
+        {activityCategories.length > 0 && (
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-ui text-xs text-t-tertiary">
+                Tell us more
+              </label>
+              <button
+                type="button"
+                onClick={isRecording ? stopRecording : startRecording}
+                className={cn(
+                  "flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-ui transition-colors",
+                  isRecording
+                    ? "bg-terra/20 text-terra"
+                    : "bg-elevated text-t-secondary hover:bg-hover"
+                )}
+              >
+                {isRecording && (
+                  <span className="w-2 h-2 rounded-full bg-terra animate-pulse" />
+                )}
+                <span>{isRecording ? "Stop" : "\u{1F3A4} Record"}</span>
+              </button>
+            </div>
+            <textarea
+              rows={3}
+              placeholder="E.g. we love water sports, want a cooking class, or just want to chill by the pool..."
+              className="w-full px-3 py-2 bg-surface border border-b-mid rounded-[4px] text-t-primary font-ui text-sm focus:outline-none focus:border-t-secondary transition-colors resize-none"
+              value={activityDetails}
+              onChange={(e) => setActivityDetails(e.target.value)}
             />
           </div>
-          <span className="text-t-tertiary text-sm">–</span>
-          <div className="flex items-center gap-1">
-            <span className="font-mono text-sm text-t-secondary">₹</span>
-            <input
-              type="number"
-              placeholder="Max"
-              className="w-28 h-11 px-3 bg-surface border border-b-mid rounded-[4px] text-t-primary font-mono text-sm focus:outline-none focus:border-t-secondary transition-colors"
-              value={dailyMax ?? ""}
-              onChange={(e) =>
-                setDailyMax(
-                  e.target.value ? Number(e.target.value) : undefined
-                )
-              }
-            />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Notes */}

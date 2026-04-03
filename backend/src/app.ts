@@ -9,6 +9,7 @@ import aiRouter           from './routes/ai';
 import budgetRouter       from './routes/budget';
 import availabilityRouter from './routes/availability';
 import deadlinesRouter    from './routes/deadlines';
+import insightsRouter     from './routes/insights';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/trips/:joinToken/ai-suggest',   aiRouter);
 app.use('/api/trips/:joinToken/budget',       budgetRouter);
 app.use('/api/trips/:joinToken/availability', availabilityRouter);
 app.use('/api/trips/:joinToken/deadlines',    deadlinesRouter);
+app.use('/api/trips/:joinToken/insights',    insightsRouter);
 
 // ─── 404 fallthrough ─────────────────────────────────────────────────────────
 app.use((_req, res) => {

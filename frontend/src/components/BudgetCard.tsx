@@ -232,6 +232,36 @@ export default function BudgetCard({
               </div>
             );
           })}
+
+          {/* Group average row */}
+          {(() => {
+            const submitted = budgetPrefs.filter(
+              (p) => p.trip_budget_min != null && p.trip_budget_max != null
+            );
+            if (submitted.length < 2) return null;
+            const avgMin =
+              Math.round(
+                submitted.reduce((s, p) => s + p.trip_budget_min!, 0) /
+                  submitted.length /
+                  500
+              ) * 500;
+            const avgMax =
+              Math.round(
+                submitted.reduce((s, p) => s + p.trip_budget_max!, 0) /
+                  submitted.length /
+                  500
+              ) * 500;
+            return (
+              <div className="border-t border-b-subtle pt-2 mt-2 flex justify-between items-center py-1 px-2">
+                <span className="font-ui text-xs text-t-tertiary uppercase tracking-widest">
+                  Group average
+                </span>
+                <span className="font-mono text-sm text-t-primary font-medium">
+                  {formatBudget(avgMin)} – {formatBudget(avgMax)}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

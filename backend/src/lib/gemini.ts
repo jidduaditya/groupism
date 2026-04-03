@@ -406,6 +406,84 @@ All amounts in INR per person.`;
   }
 }
 
+// ─── Group Insights ─────────────────────────────────────────────────────────
+
+export interface GroupInsightsResult {
+  vibe_summary: string;
+  itinerary_notes: string;
+  friction_flags: Array<{ area: string; detail: string }>;
+}
+
+export async function generateGroupInsights(params: {
+  destination: string | null;
+  nights: number;
+  members: Array<{
+    name: string;
+    trip_budget_min?: number | null;
+    trip_budget_max?: number | null;
+    accommodation_tier?: string | null;
+    transport_pref?: string | null;
+    dining_style?: string | null;
+    activity_categories?: string[] | null;
+    activity_details?: string | null;
+  }>;
+}): Promise<GroupInsightsResult> {
+  const destContext = params.destination
+    ? `Destination: ${params.destination}, ${params.nights} nights`
+    : `Trip duration: ${params.nights} nights (destination not decided yet)`;
+
+  const memberLines = params.members.map((m, i) => {
+    const parts: string[] = [];
+    if (m.accommodation_tier) parts.push(`stay=${m.accommodation_tier}`);
+    if (m.transport_pref) parts.push(`transport=${m.transport_pref}`);
+    if (m.dining_style) parts.push(`food=${m.dining_style}`);
+    if (m.activity_categories?.length) parts.push(`wants=[${m.activity_categories.join(', ')}]`);
+    if (m.activity_details) parts.push(`details="${m.activity_details}"`);
+    if (m.trip_budget_min && m.trip_budget_max) {
+      parts.push(`budget=₹${m.trip_budget_min.toLocaleString('en-IN')}–₹${m.trip_budget_max.toLocaleString('en-IN')}`);
+    }
+    return `${i + 1}. ${m.name}: ${parts.join(', ') || 'no preferences yet'}`;
+  }).join('\n');
+
+  const prompt = `You are a group travel analyst for Indian domestic trips. Analyse this group's collective preferences and provide insights.
+
+${destContext}
+Group size: ${params.members.length}
+
+Member preferences:
+${memberLines}
+
+Provide:
+1. A vibe summary — what kind of trip does this group collectively want? (2-3 sentences, be specific)
+2. Itinerary notes — what should the planner prioritise? (3-5 bullet points, one per line)
+3. Friction flags — where do members disagree or where might planning get complicated? (can be empty if everyone is aligned)
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "vibe_summary": "string",
+  "itinerary_notes": "bullet1\\nbullet2\\nbullet3",
+  "friction_flags": [{ "area": "string", "detail": "string" }]
+}
+
+Be direct and practical. No generic travel advice. friction_flags can be empty array if everyone is aligned.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    if (!parsed.vibe_summary || parsed.itinerary_notes === undefined) {
+      throw new Error('Unexpected Gemini response shape');
+    }
+
+    return parsed;
+  } catch (err) {
+    console.error('Gemini group insights error:', err);
+    throw new Error('AI_UNAVAILABLE');
+  }
+}
+
 // ─── Destination Suggestions ────────────────────────────────────────────────
 
 export async function getDestinationSuggestions(params: {

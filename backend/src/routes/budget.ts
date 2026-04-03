@@ -13,7 +13,7 @@ const DINING_STYLES = ['local_cheap', 'mixed', 'restaurants'];
 router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   const trip = (req as any).trip;
   const member = (req as any).member;
-  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, trip_budget_min, trip_budget_max, notes } = req.body;
+  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, trip_budget_min, trip_budget_max, notes, activity_categories, activity_details } = req.body;
 
   // Validate only when provided (fields are optional for auto-save)
   if (accommodation_tier !== undefined && !ACCOMMODATION_TIERS.includes(accommodation_tier)) {
@@ -27,6 +27,12 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   }
   if (activities && !Array.isArray(activities)) {
     return res.status(400).json({ error: 'activities must be an array' });
+  }
+  if (activity_categories && !Array.isArray(activity_categories)) {
+    return res.status(400).json({ error: 'activity_categories must be an array' });
+  }
+  if (activity_details !== undefined && typeof activity_details !== 'string') {
+    return res.status(400).json({ error: 'activity_details must be a string' });
   }
   if (daily_budget_min != null && typeof daily_budget_min !== 'number') {
     return res.status(400).json({ error: 'daily_budget_min must be a number' });
@@ -53,8 +59,10 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   if (daily_budget_min   !== undefined) prefData.daily_budget_min   = daily_budget_min;
   if (daily_budget_max   !== undefined) prefData.daily_budget_max   = daily_budget_max;
   if (notes              !== undefined) prefData.notes              = notes || null;
-  if (trip_budget_min    !== undefined) prefData.trip_budget_min    = trip_budget_min;
-  if (trip_budget_max    !== undefined) prefData.trip_budget_max    = trip_budget_max;
+  if (trip_budget_min       !== undefined) prefData.trip_budget_min       = trip_budget_min;
+  if (trip_budget_max       !== undefined) prefData.trip_budget_max       = trip_budget_max;
+  if (activity_categories   !== undefined) prefData.activity_categories   = activity_categories || [];
+  if (activity_details      !== undefined) prefData.activity_details      = activity_details || null;
 
   // Require at least one preference field
   if (Object.keys(prefData).length <= 2) {
