@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import MemberCirclesRow from "@/components/MemberCirclesRow";
-import CoupleReadinessStrip from "@/components/CoupleReadinessStrip";
 import DeadlineSetterCollapsed from "@/components/DeadlineSetterCollapsed";
 import DestinationSearchCard from "@/components/DestinationSearchCard";
 import BudgetDropdowns from "@/components/BudgetDropdowns";
@@ -11,7 +10,6 @@ import PersonalPreferencesCard from "@/components/PersonalPreferencesCard";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
-import { useAppVersion } from "@/hooks/useAppVersion";
 
 interface Member {
   id: string;
@@ -20,14 +18,6 @@ interface Member {
   has_confirmed: boolean;
   confirmed_at: string | null;
   joined_at: string;
-  couple_id?: string | null;
-}
-
-interface Couple {
-  id: string;
-  couple_name: string | null;
-  member_1: { id: string; display_name: string; has_confirmed: boolean } | null;
-  member_2: { id: string; display_name: string; has_confirmed: boolean } | null;
 }
 
 interface Deadline {
@@ -39,9 +29,16 @@ interface Deadline {
 interface Destination {
   id: string;
   name: string;
+  tagline: string | null;
+  pros: string[];
+  cons: string[];
+  estimated_cost_min: number | null;
+  estimated_cost_max: number | null;
+  cost_breakdown: any | null;
+  nights: number | null;
   votes: number;
   voter_member_ids: string[];
-  voter_couple_ids: string[];
+  added_by_member_id: string | null;
 }
 
 interface TripData {
@@ -75,15 +72,11 @@ const TripRoom = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [budgetPrefs, setBudgetPrefs] = useState<any[]>([]);
   const [availSlots, setAvailSlots] = useState<any[]>([]);
-  const [couples, setCouples] = useState<Couple[]>([]);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-
-  const [appVersion] = useAppVersion();
-  const isV5 = appVersion === "v5";
 
   const tokens = joinToken ? getTokens(joinToken) : null;
   const isOrganiser = !!tokens?.organiserToken;
@@ -97,7 +90,6 @@ const TripRoom = () => {
       setMembers(data.members);
       setBudgetPrefs(data.budget_preferences ?? []);
       setAvailSlots(data.availability_slots ?? []);
-      setCouples(data.couples ?? []);
       setDeadlines(data.deadlines ?? []);
       setDestinations(data.destinations ?? []);
       setError(null);
@@ -118,6 +110,11 @@ const TripRoom = () => {
 
     const channel = supabase
       .channel(`trip-${trip.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "destination_options", filter: `trip_id=eq.${trip.id}` },
+        () => fetchTrip()
+      )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "destination_votes", filter: `trip_id=eq.${trip.id}` },
@@ -141,11 +138,6 @@ const TripRoom = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "couples", filter: `trip_id=eq.${trip.id}` },
         () => fetchTrip()
       )
       .subscribe();
@@ -182,6 +174,90 @@ const TripRoom = () => {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  // ─── Destination handlers ───
+
+  const handleVote = async (destId: string) => {
+    if (!joinToken) return;
+
+    // Optimistic update
+    setDestinations((prev) =>
+      prev.map((d) => {
+        if (d.id !== destId) return d;
+        const alreadyVoted = currentMemberId
+          ? d.voter_member_ids.includes(currentMemberId)
+          : false;
+        if (alreadyVoted) {
+          return {
+            ...d,
+            votes: d.votes - 1,
+            voter_member_ids: d.voter_member_ids.filter((id) => id !== currentMemberId),
+          };
+        }
+        return {
+          ...d,
+          votes: d.votes + 1,
+          voter_member_ids: currentMemberId
+            ? [...d.voter_member_ids, currentMemberId]
+            : d.voter_member_ids,
+        };
+      })
+    );
+
+    try {
+      await api.post(
+        `/api/trips/${joinToken}/destinations/${destId}/vote`,
+        {},
+        joinToken
+      );
+      await fetchTrip();
+    } catch (err: any) {
+      // Rollback — refetch
+      await fetchTrip();
+      toast({ title: "Vote failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleRemoveDestination = async (destId: string) => {
+    if (!joinToken) return;
+    try {
+      await api.delete(`/api/trips/${joinToken}/destinations/${destId}`, joinToken);
+      await fetchTrip();
+      toast({ title: "Destination removed" });
+    } catch (err: any) {
+      toast({ title: "Remove failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleSelectDestination = async (destId: string) => {
+    if (!joinToken) return;
+    try {
+      await api.patch(
+        `/api/trips/${joinToken}`,
+        { selected_destination_id: destId },
+        joinToken
+      );
+      await fetchTrip();
+      toast({ title: "Destination locked in" });
+    } catch (err: any) {
+      toast({ title: "Selection failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeselectDestination = async () => {
+    if (!joinToken) return;
+    try {
+      await api.patch(
+        `/api/trips/${joinToken}`,
+        { selected_destination_id: null },
+        joinToken
+      );
+      await fetchTrip();
+      toast({ title: "Selection cleared" });
+    } catch (err: any) {
+      toast({ title: "Failed to clear", description: err.message, variant: "destructive" });
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -210,15 +286,13 @@ const TripRoom = () => {
   // Derived state
   const myMember = members.find((m) => m.id === currentMemberId);
   const hasConfirmed = myMember?.has_confirmed || false;
-  const myCoupleId = myMember?.couple_id ?? null;
 
   const card2Enabled = trip.selected_destination_id !== null;
   const card3Enabled = trip.budget_min !== null;
 
-  // Current user's existing budget preferences
   const myPrefs = budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
 
-  // Deadline lookups by item_type
+  // Deadline lookups
   const destDeadline = deadlines.find((d) => d.item_type === "destination_vote") ?? null;
   const budgetDeadline = deadlines.find((d) => d.item_type === "budget_input") ?? null;
   const availDeadline = deadlines.find((d) => d.item_type === "availability") ?? null;
@@ -231,11 +305,7 @@ const TripRoom = () => {
   if (trip.travel_from && trip.travel_to) {
     headerParts.push(`${formatDate(trip.travel_from)}–${formatDate(trip.travel_to)}`);
   }
-  if (isV5 && couples.length > 0) {
-    headerParts.push(`${couples.length} couples`);
-  } else {
-    headerParts.push(`${members.length} people`);
-  }
+  headerParts.push(`${members.length} people`);
 
   return (
     <div className="min-h-screen relative z-10">
@@ -266,23 +336,10 @@ const TripRoom = () => {
           members={members}
           groupSize={trip.group_size || members.length}
           currentMemberId={currentMemberId}
-          {...(isV5 ? { couples, joinToken: joinToken! } : {})}
         />
 
-        {/* Couple readiness strip — V5 organiser only */}
-        {isV5 && isOrganiser && couples.length > 0 && (
-          <div className="mt-4">
-            <CoupleReadinessStrip
-              couples={couples}
-              destinations={destinations}
-              budgetPrefs={budgetPrefs}
-              availSlots={availSlots}
-            />
-          </div>
-        )}
-
-        {/* Deadline setter — V5 organiser only */}
-        {isV5 && isOrganiser && (
+        {/* Deadline setter — organiser only */}
+        {isOrganiser && (
           <div className="mt-4">
             <DeadlineSetterCollapsed
               joinToken={joinToken!}
@@ -297,9 +354,15 @@ const TripRoom = () => {
           <DestinationSearchCard
             joinToken={joinToken!}
             trip={trip}
+            destinations={destinations}
+            currentMemberId={currentMemberId}
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
-            deadline={isV5 ? destDeadline : undefined}
+            onVote={handleVote}
+            onRemove={handleRemoveDestination}
+            onSelect={handleSelectDestination}
+            onDeselect={handleDeselectDestination}
+            deadline={destDeadline}
           />
         </div>
 
@@ -324,7 +387,7 @@ const TripRoom = () => {
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
             disabled={!card2Enabled}
-            deadline={isV5 ? budgetDeadline : undefined}
+            deadline={budgetDeadline}
           />
         </div>
 
@@ -339,7 +402,7 @@ const TripRoom = () => {
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
             disabled={!card3Enabled}
-            availabilityDeadline={isV5 ? availDeadline : undefined}
+            availabilityDeadline={availDeadline}
           />
         </div>
 
@@ -349,7 +412,6 @@ const TripRoom = () => {
             joinToken={joinToken!}
             existingPrefs={myPrefs}
             onRefresh={fetchTrip}
-            coupleId={isV5 ? myCoupleId : undefined}
           />
         </div>
       </div>

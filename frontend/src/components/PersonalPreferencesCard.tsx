@@ -16,7 +16,6 @@ interface PersonalPreferencesCardProps {
     notes?: string;
   } | null;
   onRefresh: () => void;
-  coupleId?: string | null;
 }
 
 const ACCOMMODATION_OPTIONS = [
@@ -49,7 +48,6 @@ export default function PersonalPreferencesCard({
   joinToken,
   existingPrefs,
   onRefresh,
-  coupleId,
 }: PersonalPreferencesCardProps) {
   const [accommodation, setAccommodation] = useState<string>(
     existingPrefs?.accommodation_tier ?? ""
@@ -93,7 +91,6 @@ export default function PersonalPreferencesCard({
       daily_budget_min: dailyMin,
       daily_budget_max: dailyMax,
       notes: notes || undefined,
-      ...(coupleId ? { couple_id: coupleId } : {}),
     };
 
     try {
@@ -119,7 +116,6 @@ export default function PersonalPreferencesCard({
     notes,
     joinToken,
     onRefresh,
-    coupleId,
   ]);
 
   useEffect(() => {

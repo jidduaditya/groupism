@@ -156,19 +156,19 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     { data: availSlots },
     { data: travelWindows },
     { data: deadlines },
-    { data: couples },
   ] = await Promise.all([
     supabase
       .from('trip_members')
-      .select('id, display_name, is_organiser, has_confirmed, confirmed_at, joined_at, couple_id')
+      .select('id, display_name, is_organiser, has_confirmed, confirmed_at, joined_at')
       .eq('trip_id', trip.id)
       .order('joined_at', { ascending: true }),
     supabase
       .from('destination_options')
       .select(`
         id, name, tagline, pros, cons, best_for,
-        estimated_cost_min, estimated_cost_max, source, created_at,
-        destination_votes(member_id, couple_id)
+        estimated_cost_min, estimated_cost_max, cost_breakdown, nights,
+        added_by_member_id, source, created_at,
+        destination_votes(member_id)
       `)
       .eq('trip_id', trip.id)
       .order('created_at', { ascending: true }),
@@ -194,15 +194,6 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
       .from('deadlines')
       .select('*')
       .eq('trip_id', trip.id),
-    supabase
-      .from('couples')
-      .select(`
-        id, couple_name,
-        member_1:trip_members!couples_member_id_1_fkey(id, display_name, has_confirmed),
-        member_2:trip_members!couples_member_id_2_fkey(id, display_name, has_confirmed)
-      `)
-      .eq('trip_id', trip.id)
-      .order('created_at', { ascending: true }),
   ]);
 
   // Auto-lock past-due deadlines
@@ -224,11 +215,21 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
 
   // Flatten vote counts and expose voter_member_ids
   const destinationsWithVotes = (destinations || []).map((d: any) => ({
-    ...d,
-    votes: d.destination_votes?.length ?? 0,
-    voter_member_ids: (d.destination_votes || []).map((v: any) => v.member_id),
-    voter_couple_ids: [...new Set((d.destination_votes || []).map((v: any) => v.couple_id).filter(Boolean))],
-    destination_votes: undefined,
+    id:                  d.id,
+    name:                d.name,
+    tagline:             d.tagline,
+    pros:                d.pros,
+    cons:                d.cons,
+    best_for:            d.best_for,
+    estimated_cost_min:  d.estimated_cost_min,
+    estimated_cost_max:  d.estimated_cost_max,
+    cost_breakdown:      d.cost_breakdown ?? null,
+    nights:              d.nights ?? null,
+    added_by_member_id:  d.added_by_member_id ?? null,
+    source:              d.source,
+    created_at:          d.created_at,
+    votes:               d.destination_votes?.length ?? 0,
+    voter_member_ids:    (d.destination_votes || []).map((v: any) => v.member_id),
   }));
 
   // V1 readiness score: 50% voting + 50% confirmation
@@ -281,7 +282,6 @@ router.get('/:joinToken', loadTrip, async (req, res) => {
     travel_windows: travelWindows ?? null,
     deadlines: deadlines ?? [],
     readiness_v2: readinessV2,
-    couples: couples ?? [],
   });
 });
 

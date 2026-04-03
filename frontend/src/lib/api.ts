@@ -55,4 +55,10 @@ export const api = {
       headers: headers(joinToken),
       body: JSON.stringify(body),
     }).then(handleRes),
+
+  delete: (path: string, joinToken?: string) =>
+    fetch(`${BASE}${path}`, {
+      method: "DELETE",
+      headers: headers(joinToken),
+    }).then(handleRes),
 };

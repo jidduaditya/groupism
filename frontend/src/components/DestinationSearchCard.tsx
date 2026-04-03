@@ -4,6 +4,22 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import DestinationVoteCard from "./DestinationVoteCard";
+
+interface Destination {
+  id: string;
+  name: string;
+  tagline: string | null;
+  pros: string[];
+  cons: string[];
+  estimated_cost_min: number | null;
+  estimated_cost_max: number | null;
+  cost_breakdown: any | null;
+  nights: number | null;
+  votes: number;
+  voter_member_ids: string[];
+  added_by_member_id: string | null;
+}
 
 interface DestinationSearchCardProps {
   joinToken: string;
@@ -17,41 +33,60 @@ interface DestinationSearchCardProps {
     travel_from: string | null;
     travel_to: string | null;
   };
+  destinations: Destination[];
+  currentMemberId: string | null;
   isOrganiser: boolean;
   onTripUpdated: () => void;
+  onVote: (destId: string) => void;
+  onRemove: (destId: string) => void;
+  onSelect: (destId: string) => void;
+  onDeselect: () => void;
   deadline?: { due_date: string; locked: boolean } | null;
 }
 
-type ViewState =
-  | { mode: "search" }
+type AddState =
+  | { mode: "idle" }
   | { mode: "loading"; loadingText: string }
   | { mode: "suggestions"; suggestions: string[] }
-  | { mode: "summary"; summary: any }
-  | { mode: "selected" }
+  | { mode: "preview"; summary: any }
   | { mode: "error"; message: string };
 
 export default function DestinationSearchCard({
   joinToken,
   trip,
+  destinations,
+  currentMemberId,
   isOrganiser,
   onTripUpdated,
+  onVote,
+  onRemove,
+  onSelect,
+  onDeselect,
   deadline,
 }: DestinationSearchCardProps) {
-  const hasExistingDestination =
-    trip.selected_destination_id !== null && trip.destination_summary !== null;
-
-  const [view, setView] = useState<ViewState>(
-    hasExistingDestination ? { mode: "selected" } : { mode: "search" }
-  );
   const [searchValue, setSearchValue] = useState("");
   const [aiPromptValue, setAiPromptValue] = useState("");
-  const [selecting, setSelecting] = useState(false);
+  const [addState, setAddState] = useState<AddState>({ mode: "idle" });
+
+  // Find the winning destination (most votes, at least 1)
+  const maxVotes = Math.max(0, ...destinations.map((d) => d.votes));
+  const winningId =
+    maxVotes > 0
+      ? destinations.find((d) => d.votes === maxVotes)?.id ?? null
+      : null;
+
+  // Sort: selected first, then by votes descending
+  const sortedDestinations = [...destinations].sort((a, b) => {
+    if (a.id === trip.selected_destination_id) return -1;
+    if (b.id === trip.selected_destination_id) return 1;
+    return b.votes - a.votes;
+  });
 
   async function handleSearch() {
     const query = searchValue.trim();
     if (!query) return;
 
-    setView({ mode: "loading", loadingText: "Searching..." });
+    setAddState({ mode: "loading", loadingText: "Searching..." });
 
     try {
       const res = await api.post(
@@ -59,29 +94,25 @@ export default function DestinationSearchCard({
         { query, source: "search" },
         joinToken
       );
-      // Unwrap the { destination: { ... } } wrapper if present
       const summary = res.destination ?? res;
-      setView({ mode: "summary", summary });
-    } catch (err: any) {
-      const status = err?.status ?? err?.response?.status;
-      if (status === 503) {
-        setView({
-          mode: "error",
-          message:
-            "AI is unavailable right now. Try searching a destination manually.",
-        });
+      if (summary.already_existed) {
+        toast({ title: "Already in the list" });
+        setAddState({ mode: "idle" });
+        setSearchValue("");
+        onTripUpdated();
       } else {
-        setView({
-          mode: "error",
-          message:
-            "AI is unavailable right now. Try searching a destination manually.",
-        });
+        setAddState({ mode: "preview", summary });
       }
+    } catch {
+      setAddState({
+        mode: "error",
+        message: "AI is unavailable right now. Try again later.",
+      });
     }
   }
 
   async function handleAiSuggest() {
-    setView({ mode: "loading", loadingText: "Thinking about your group..." });
+    setAddState({ mode: "loading", loadingText: "Thinking about your group..." });
 
     try {
       const res = await api.post(
@@ -91,21 +122,27 @@ export default function DestinationSearchCard({
       );
 
       if (res.suggestions && Array.isArray(res.suggestions)) {
-        setView({ mode: "suggestions", suggestions: res.suggestions });
+        setAddState({ mode: "suggestions", suggestions: res.suggestions });
       } else {
-        setView({ mode: "summary", summary: res });
+        const summary = res.destination ?? res;
+        if (summary.already_existed) {
+          toast({ title: "Already in the list" });
+          setAddState({ mode: "idle" });
+          onTripUpdated();
+        } else {
+          setAddState({ mode: "preview", summary });
+        }
       }
     } catch {
-      setView({
+      setAddState({
         mode: "error",
-        message:
-          "AI is unavailable right now. Try searching a destination manually.",
+        message: "AI is unavailable right now. Try again later.",
       });
     }
   }
 
   async function handleChipClick(chipName: string) {
-    setView({ mode: "loading", loadingText: "Searching..." });
+    setAddState({ mode: "loading", loadingText: "Searching..." });
 
     try {
       const res = await api.post(
@@ -114,59 +151,32 @@ export default function DestinationSearchCard({
         joinToken
       );
       const summary = res.destination ?? res;
-      setView({ mode: "summary", summary });
+      if (summary.already_existed) {
+        toast({ title: "Already in the list" });
+        setAddState({ mode: "idle" });
+        onTripUpdated();
+      } else {
+        setAddState({ mode: "preview", summary });
+      }
     } catch {
-      setView({
+      setAddState({
         mode: "error",
-        message:
-          "AI is unavailable right now. Try searching a destination manually.",
+        message: "AI is unavailable right now. Try again later.",
       });
     }
   }
 
-  async function handleSelect(summary: any) {
-    setSelecting(true);
-
-    try {
-      const destRes = await api.post(
-        `/api/trips/${joinToken}/destinations`,
-        {
-          name: summary.name,
-          tagline: summary.tagline,
-          pros: summary.highlights,
-          cons: summary.watch_out,
-          estimated_cost_min: summary.cost_breakdown?.total_min,
-          estimated_cost_max: summary.cost_breakdown?.total_max,
-          source: "ai",
-        },
-        joinToken
-      );
-
-      const destinationId = destRes.destination?.id;
-
-      await api.patch(
-        `/api/trips/${joinToken}`,
-        {
-          selected_destination_id: destinationId,
-          destination_summary: summary,
-        },
-        joinToken
-      );
-
-      onTripUpdated();
-    } catch {
-      toast({
-        title: "Failed to select destination",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setSelecting(false);
-    }
+  function handleAddedToList() {
+    // The destination was auto-saved by the backend during the summary call
+    setAddState({ mode: "idle" });
+    setSearchValue("");
+    setAiPromptValue("");
+    onTripUpdated();
+    toast({ title: "Added to group list" });
   }
 
-  function handleChangeDestination() {
-    setView({ mode: "search" });
+  function handleReset() {
+    setAddState({ mode: "idle" });
     setSearchValue("");
   }
 
@@ -176,154 +186,178 @@ export default function DestinationSearchCard({
         Where are you going?
       </h2>
 
-      {/* Already selected state */}
-      {view.mode === "selected" && trip.destination_summary && (
-        <div>
-          {isOrganiser && (
-            <button
-              onClick={handleChangeDestination}
-              className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors mb-4"
-            >
-              &larr; Change destination
-            </button>
-          )}
-          <PlaceSummaryCard
-            summary={trip.destination_summary}
-            trip={trip}
-            readOnly
-          />
-        </div>
-      )}
+      {/* ─── Section A: Add a suggestion ─── */}
+      <div className="mb-6">
+        {addState.mode === "idle" && (
+          <div className="space-y-4">
+            {/* Direct search */}
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t-tertiary text-base pointer-events-none">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+                placeholder="Search a destination..."
+                className="w-full h-11 pl-10 pr-4 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors"
+              />
+            </div>
 
-      {/* Search mode */}
-      {view.mode === "search" && (
-        <div className="space-y-4">
-          {/* Direct search */}
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t-tertiary text-base pointer-events-none">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSearch();
-              }}
-              placeholder="Search a destination..."
-              className="w-full h-11 pl-10 pr-4 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors"
-            />
-          </div>
-
-          {/* AI suggest */}
-          <div className="border-t border-b-subtle pt-4">
-            <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
-              Or let AI suggest
-            </p>
-            <textarea
-              value={aiPromptValue}
-              onChange={(e) => setAiPromptValue(e.target.value)}
-              placeholder="e.g. beach + nightlife, or quiet hills for families..."
-              rows={2}
-              className="w-full px-4 py-3 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors resize-none"
-            />
-            <button
-              onClick={handleAiSuggest}
-              className="mt-2 h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap"
-            >
-              Suggest →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Loading state */}
-      {view.mode === "loading" && (
-        <LoadingShimmer text={view.loadingText} />
-      )}
-
-      {/* AI suggestions */}
-      {view.mode === "suggestions" && (
-        <div className="space-y-4">
-          <p className="font-ui text-sm text-t-secondary">
-            Pick a destination to explore:
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {view.suggestions.map((name) => (
+            {/* AI suggest */}
+            <div className="border-t border-b-subtle pt-4">
+              <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
+                Or let AI suggest
+              </p>
+              <textarea
+                value={aiPromptValue}
+                onChange={(e) => setAiPromptValue(e.target.value)}
+                placeholder="e.g. beach + nightlife, or quiet hills for families..."
+                rows={2}
+                className="w-full px-4 py-3 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors resize-none"
+              />
               <button
-                key={name}
-                onClick={() => handleChipClick(name)}
-                className="h-11 px-5 rounded-[4px] bg-surface border border-b-mid font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer"
+                onClick={handleAiSuggest}
+                className="mt-2 h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap"
               >
-                {name}
+                Suggest →
               </button>
+            </div>
+          </div>
+        )}
+
+        {addState.mode === "loading" && (
+          <LoadingShimmer text={addState.loadingText} />
+        )}
+
+        {addState.mode === "suggestions" && (
+          <div className="space-y-4">
+            <p className="font-ui text-sm text-t-secondary">
+              Pick a destination to explore:
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {addState.suggestions.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => handleChipClick(name)}
+                  className="h-11 px-5 rounded-[4px] bg-surface border border-b-mid font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleReset}
+              className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
+            >
+              ← Back to search
+            </button>
+          </div>
+        )}
+
+        {addState.mode === "preview" && (
+          <div className="space-y-4">
+            <button
+              onClick={handleReset}
+              className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
+            >
+              ← Back to search
+            </button>
+            {/* Compact preview */}
+            <div className="border border-b-mid rounded-[4px] p-4">
+              <h3 className="font-display text-xl font-bold text-t-primary">
+                {addState.summary.name}
+              </h3>
+              {addState.summary.tagline && (
+                <p className="font-ui font-light text-sm text-t-secondary mt-1">
+                  {addState.summary.tagline}
+                </p>
+              )}
+              {addState.summary.cost_breakdown && (
+                <p className="font-mono text-xs text-t-tertiary mt-2">
+                  Est.{" "}
+                  {formatRange(
+                    addState.summary.cost_breakdown.total_min,
+                    addState.summary.cost_breakdown.total_max
+                  )}{" "}
+                  pp
+                  {addState.summary.nights
+                    ? `  ·  ${addState.summary.nights} nights`
+                    : ""}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleAddedToList}
+              className={cn(
+                "w-full h-12 bg-amber text-[#1c1a15] font-display font-bold text-base rounded-[4px] cursor-pointer hover:opacity-90 transition-opacity"
+              )}
+            >
+              Add {addState.summary.name || "destination"} to group list →
+            </button>
+          </div>
+        )}
+
+        {addState.mode === "error" && (
+          <div className="space-y-4">
+            <p className="font-ui text-sm text-terra">{addState.message}</p>
+            <button
+              onClick={handleReset}
+              className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
+            >
+              ← Back to search
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Section B: Shared suggestions list ─── */}
+      <div className="border-t border-b-subtle pt-6">
+        {destinations.length === 0 ? (
+          <p className="font-ui font-light text-sm text-t-tertiary text-center py-4">
+            Suggest a destination above — it'll appear here for the group to vote on.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-3">
+              {destinations.length} {destinations.length === 1 ? "suggestion" : "suggestions"}
+            </p>
+            {sortedDestinations.map((dest) => (
+              <div
+                key={dest.id}
+                className={cn(
+                  "transition-opacity",
+                  trip.selected_destination_id &&
+                    trip.selected_destination_id !== dest.id &&
+                    "opacity-50"
+                )}
+              >
+                <DestinationVoteCard
+                  destination={dest}
+                  currentMemberId={currentMemberId}
+                  isOrganiser={isOrganiser}
+                  isSelected={trip.selected_destination_id === dest.id}
+                  isWinning={winningId === dest.id}
+                  joinToken={joinToken}
+                  groupSize={trip.group_size}
+                  onVote={onVote}
+                  onRemove={onRemove}
+                  onSelect={onSelect}
+                  onDeselect={onDeselect}
+                />
+              </div>
             ))}
           </div>
-          <button
-            onClick={handleChangeDestination}
-            className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
-          >
-            &larr; Back to search
-          </button>
-        </div>
-      )}
-
-      {/* Summary view */}
-      {view.mode === "summary" && (
-        <div className="space-y-6">
-          <button
-            onClick={handleChangeDestination}
-            className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
-          >
-            &larr; Back to search
-          </button>
-          <PlaceSummaryCard
-            summary={view.summary}
-            trip={trip}
-          />
-          <button
-            onClick={() => handleSelect(view.summary)}
-            disabled={selecting}
-            className={cn(
-              "w-full h-14 bg-amber text-[#1c1a15] font-display font-bold text-lg rounded-[4px] transition-opacity",
-              selecting ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:opacity-90"
-            )}
-          >
-            {selecting
-              ? "Selecting..."
-              : `Select ${view.summary.name || "destination"} \u2192`}
-          </button>
-        </div>
-      )}
-
-      {/* Error state */}
-      {view.mode === "error" && (
-        <div className="space-y-4">
-          <p className="font-ui text-sm text-terra">{view.message}</p>
-          <button
-            onClick={handleChangeDestination}
-            className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
-          >
-            &larr; Back to search
-          </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Inline deadline */}
       {deadline && !deadline.locked && (() => {
-        const now = new Date(); now.setHours(0,0,0,0);
+        const now = new Date(); now.setHours(0, 0, 0, 0);
         const days = Math.ceil((new Date(deadline.due_date).getTime() - now.getTime()) / 86400000);
         return (
           <p className={cn("font-ui text-xs mt-4", days <= 2 ? "text-terra" : "text-t-tertiary")}>
@@ -343,159 +377,11 @@ function LoadingShimmer({ text }: { text: string }) {
   return (
     <div className="space-y-4">
       {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="h-12 bg-surface rounded-[4px] overflow-hidden relative"
-        >
+        <div key={i} className="h-12 bg-surface rounded-[4px] overflow-hidden relative">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
         </div>
       ))}
       <p className="font-ui font-light text-sm text-t-secondary">{text}</p>
-    </div>
-  );
-}
-
-function PlaceSummaryCard({
-  summary,
-  trip,
-  readOnly = false,
-}: {
-  summary: any;
-  trip: { group_size: number; travel_from: string | null; travel_to: string | null };
-  readOnly?: boolean;
-}) {
-  const highlights: string[] = summary.highlights ?? summary.pros ?? [];
-  const watchOuts: string[] = summary.watch_out ?? summary.cons ?? [];
-  const costBreakdown = summary.cost_breakdown ?? summary.estimated_costs ?? null;
-
-  const nightCount =
-    trip.travel_from && trip.travel_to
-      ? Math.max(
-          1,
-          Math.round(
-            (new Date(trip.travel_to).getTime() -
-              new Date(trip.travel_from).getTime()) /
-              (1000 * 60 * 60 * 24)
-          )
-        )
-      : null;
-
-  return (
-    <div className="space-y-5">
-      {/* Name */}
-      <div>
-        <h3 className="font-display text-4xl font-bold text-t-primary">
-          {summary.name}
-        </h3>
-        <div className="border-t border-b-mid mt-3" />
-      </div>
-
-      {/* Tagline */}
-      {summary.tagline && (
-        <p className="font-ui font-light text-t-secondary mt-2">
-          {summary.tagline}
-        </p>
-      )}
-
-      {/* Highlights & watch-outs */}
-      {(highlights.length > 0 || watchOuts.length > 0) && (
-        <div className="space-y-1.5">
-          {highlights.map((h, i) => (
-            <p key={`h-${i}`} className="text-green font-ui text-sm">
-              &#10003; {h}
-            </p>
-          ))}
-          {watchOuts.map((w, i) => (
-            <p key={`w-${i}`} className="text-terra font-ui text-sm">
-              &#10007; {w}
-            </p>
-          ))}
-        </div>
-      )}
-
-      {/* Cost breakdown */}
-      {costBreakdown && (
-        <div className="space-y-3">
-          <div>
-            <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider font-medium">
-              Estimated cost
-              {nightCount !== null && trip.group_size > 0
-                ? ` (${nightCount} night${nightCount !== 1 ? "s" : ""}, ${trip.group_size} ${trip.group_size === 1 ? "person" : "people"})`
-                : ""}
-            </p>
-            <div className="border-t border-b-mid mt-2" />
-          </div>
-
-          <div className="space-y-2">
-            <CostRow
-              label="Flights"
-              min={costBreakdown.flights_min}
-              max={costBreakdown.flights_max}
-              suffix="pp"
-            />
-            <CostRow
-              label="Hotel"
-              min={costBreakdown.hotel_per_night_min}
-              max={costBreakdown.hotel_per_night_max}
-              suffix="pp/night"
-            />
-            <CostRow
-              label="Food"
-              min={costBreakdown.food_per_day_min}
-              max={costBreakdown.food_per_day_max}
-              suffix="pp/day"
-            />
-            <CostRow
-              label="Activities"
-              min={costBreakdown.activities_min}
-              max={costBreakdown.activities_max}
-              suffix="pp"
-            />
-          </div>
-
-          {(costBreakdown.total_min != null ||
-            costBreakdown.total_max != null) && (
-            <div>
-              <div className="border-t border-b-subtle" />
-              <div className="flex justify-between items-center pt-2">
-                <span className="font-ui text-sm text-t-secondary">
-                  Total estimate
-                </span>
-                <span className="font-mono font-medium text-sm text-t-primary">
-                  {formatRange(
-                    costBreakdown.total_min,
-                    costBreakdown.total_max
-                  )}{" "}
-                  pp
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CostRow({
-  label,
-  min,
-  max,
-  suffix,
-}: {
-  label: string;
-  min: number | null | undefined;
-  max: number | null | undefined;
-  suffix: string;
-}) {
-  if (min == null && max == null) return null;
-
-  return (
-    <div className="flex justify-between items-center">
-      <span className="font-ui text-sm text-t-secondary">{label}</span>
-      <span className="font-mono text-sm text-t-primary">
-        {formatRange(min ?? null, max ?? null)} {suffix}
-      </span>
     </div>
   );
 }
