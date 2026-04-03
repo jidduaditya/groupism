@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
-import { estimateBudget } from '../lib/gemini';
+import { estimateBudget, analyseBudgets } from '../lib/gemini';
 import { loadTrip, requireMember, requireOrganiser } from '../middleware/tokens';
 
 const router = Router({ mergeParams: true });
@@ -13,7 +13,7 @@ const DINING_STYLES = ['local_cheap', 'mixed', 'restaurants'];
 router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   const trip = (req as any).trip;
   const member = (req as any).member;
-  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, notes } = req.body;
+  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, trip_budget_min, trip_budget_max, notes } = req.body;
 
   // Validate only when provided (fields are optional for auto-save)
   if (accommodation_tier !== undefined && !ACCOMMODATION_TIERS.includes(accommodation_tier)) {
@@ -34,6 +34,12 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   if (daily_budget_max != null && typeof daily_budget_max !== 'number') {
     return res.status(400).json({ error: 'daily_budget_max must be a number' });
   }
+  if (trip_budget_min != null && typeof trip_budget_min !== 'number') {
+    return res.status(400).json({ error: 'trip_budget_min must be a number' });
+  }
+  if (trip_budget_max != null && typeof trip_budget_max !== 'number') {
+    return res.status(400).json({ error: 'trip_budget_max must be a number' });
+  }
 
   // Build upsert payload — only include provided fields
   const prefData: Record<string, any> = {
@@ -47,6 +53,8 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   if (daily_budget_min   !== undefined) prefData.daily_budget_min   = daily_budget_min;
   if (daily_budget_max   !== undefined) prefData.daily_budget_max   = daily_budget_max;
   if (notes              !== undefined) prefData.notes              = notes || null;
+  if (trip_budget_min    !== undefined) prefData.trip_budget_min    = trip_budget_min;
+  if (trip_budget_max    !== undefined) prefData.trip_budget_max    = trip_budget_max;
 
   // Require at least one preference field
   if (Object.keys(prefData).length <= 2) {
@@ -133,6 +141,77 @@ router.post('/estimate', loadTrip, requireOrganiser, async (req, res) => {
       return res.status(503).json({ error: 'AI estimation unavailable right now. Try again later.' });
     }
     res.status(500).json({ error: 'Something went wrong.' });
+  }
+});
+
+// POST /api/trips/:joinToken/budget/analyse
+router.post('/analyse', loadTrip, requireMember, async (req, res) => {
+  const trip = (req as any).trip;
+
+  const { data: prefs } = await supabase
+    .from('budget_preferences')
+    .select('trip_budget_min, trip_budget_max, trip_members(display_name)')
+    .eq('trip_id', trip.id)
+    .not('trip_budget_min', 'is', null);
+
+  if (!prefs || prefs.length < 2) {
+    return res.status(400).json({ error: 'Need at least 2 budget submissions to analyse' });
+  }
+
+  const memberBudgets = prefs
+    .filter((p: any) => p.trip_budget_min && p.trip_budget_max)
+    .map((p: any) => ({
+      name: (p.trip_members as any)?.display_name ?? 'Member',
+      min: Number(p.trip_budget_min),
+      max: Number(p.trip_budget_max),
+    }));
+
+  const nights = trip.travel_from && trip.travel_to
+    ? Math.ceil((new Date(trip.travel_to).getTime() - new Date(trip.travel_from).getTime()) / 86400000)
+    : 3;
+
+  let selectedDest = null;
+  if (trip.selected_destination_id && trip.destination_summary) {
+    const summary = trip.destination_summary as any;
+    selectedDest = {
+      name: summary.name ?? 'destination',
+      cost_min: summary.cost_breakdown?.total_min ?? 0,
+      cost_max: summary.cost_breakdown?.total_max ?? 0,
+    };
+  }
+
+  const { data: destOptions } = await supabase
+    .from('destination_options')
+    .select('name, estimated_cost_min, estimated_cost_max')
+    .eq('trip_id', trip.id)
+    .order('created_at', { ascending: true });
+
+  const suggestedDests = (destOptions || [])
+    .filter((d: any) => d.estimated_cost_min && d.estimated_cost_max)
+    .map((d: any) => ({ name: d.name, cost_min: d.estimated_cost_min, cost_max: d.estimated_cost_max }));
+
+  try {
+    const analysis = await analyseBudgets({
+      memberBudgets,
+      selectedDestination: selectedDest,
+      suggestedDestinations: suggestedDests.length ? suggestedDests : undefined,
+      nights,
+    });
+
+    await supabase.from('budget_estimates').upsert(
+      {
+        trip_id: trip.id,
+        per_person_min: analysis.group_budget_min,
+        per_person_max: analysis.group_budget_max,
+        breakdown: analysis,
+        members_included: memberBudgets.length,
+      },
+      { onConflict: 'trip_id' }
+    );
+
+    res.json({ analysis });
+  } catch {
+    res.status(503).json({ error: 'AI analysis unavailable. Try again.' });
   }
 });
 

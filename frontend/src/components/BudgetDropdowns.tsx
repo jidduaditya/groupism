@@ -16,7 +16,6 @@ interface BudgetDropdownsProps {
   };
   isOrganiser: boolean;
   onTripUpdated: () => void;
-  disabled: boolean;
   deadline?: { due_date: string; locked: boolean } | null;
 }
 
@@ -38,7 +37,6 @@ export default function BudgetDropdowns({
   trip,
   isOrganiser,
   onTripUpdated,
-  disabled,
   deadline,
 }: BudgetDropdownsProps) {
   const [budgetMin, setBudgetMin] = useState<number | null>(
@@ -153,21 +151,10 @@ export default function BudgetDropdowns({
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-[4px] border border-b-mid bg-surface p-6",
-        disabled && "opacity-40 pointer-events-none select-none"
-      )}
-    >
+    <div className="rounded-[4px] border border-b-mid bg-surface p-6">
       <h2 className="font-display text-2xl font-bold text-t-primary mb-4">
         What&apos;s the budget?
       </h2>
-
-      {disabled && (
-        <p className="font-ui text-sm text-t-tertiary mb-4">
-          Complete destination first
-        </p>
-      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>

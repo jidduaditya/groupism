@@ -86,6 +86,87 @@ All costs are total per person in INR for the full trip duration. divergence_fla
   }
 }
 
+// ─── Budget Analysis ────────────────────────────────────────────────────────
+
+export interface BudgetAnalysisResult {
+  mode: 'locked' | 'suggestions' | 'no_context';
+  group_budget_min: number;
+  group_budget_max: number;
+  verdict: string;
+  detail: string;
+  destination_fits?: Array<{
+    name: string;
+    fit: 'comfortable' | 'tight' | 'out_of_range';
+    note: string;
+  }> | null;
+}
+
+export async function analyseBudgets(params: {
+  memberBudgets: Array<{ name: string; min: number; max: number }>;
+  selectedDestination?: { name: string; cost_min: number; cost_max: number } | null;
+  suggestedDestinations?: Array<{ name: string; cost_min: number; cost_max: number }>;
+  nights: number;
+}): Promise<BudgetAnalysisResult> {
+  const budgetSummary = params.memberBudgets
+    .map(m => `${m.name}: ₹${m.min.toLocaleString('en-IN')} – ₹${m.max.toLocaleString('en-IN')}`)
+    .join('\n');
+
+  const groupMin = Math.min(...params.memberBudgets.map(m => m.min));
+  const groupMax = Math.max(...params.memberBudgets.map(m => m.max));
+
+  const mode = params.selectedDestination
+    ? 'locked'
+    : params.suggestedDestinations?.length
+      ? 'suggestions'
+      : 'no_context';
+
+  let contextBlock = '';
+  if (params.selectedDestination) {
+    contextBlock = `Locked destination: ${params.selectedDestination.name}
+Estimated cost: ₹${params.selectedDestination.cost_min.toLocaleString('en-IN')} – ₹${params.selectedDestination.cost_max.toLocaleString('en-IN')} per person for ${params.nights} nights`;
+  } else if (params.suggestedDestinations?.length) {
+    contextBlock = `Suggested destinations under consideration:\n` +
+      params.suggestedDestinations.map(d =>
+        `${d.name}: ₹${d.cost_min.toLocaleString('en-IN')} – ₹${d.cost_max.toLocaleString('en-IN')} pp`
+      ).join('\n');
+  }
+
+  const destFitsSchema = mode === 'suggestions'
+    ? `"destination_fits": [{ "name": "string", "fit": "comfortable|tight|out_of_range", "note": "one sentence" }]`
+    : `"destination_fits": null`;
+
+  const prompt = `You are a practical travel budget advisor for an Indian group trip.
+
+Individual budgets submitted:
+${budgetSummary}
+
+${contextBlock}
+
+Trip duration: ${params.nights} nights
+
+Analyse whether the group's budget works for their travel plans. Be direct and specific — not encouraging fluff.
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "mode": "${mode}",
+  "group_budget_min": ${groupMin},
+  "group_budget_max": ${groupMax},
+  "verdict": "one sentence — e.g. 'Most of the group can afford Goa comfortably, but Meera's budget is tight.'",
+  "detail": "2-3 sentences of actionable guidance",
+  ${destFitsSchema}
+}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const clean = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    return JSON.parse(clean);
+  } catch (err) {
+    console.error('Gemini budget analysis error:', err);
+    throw new Error('AI_UNAVAILABLE');
+  }
+}
+
 // ─── Travel Window Ranking ──────────────────────────────────────────────────
 
 export interface TravelWindow {

@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import MemberCirclesRow from "@/components/MemberCirclesRow";
 import DeadlineSetterCollapsed from "@/components/DeadlineSetterCollapsed";
 import DestinationSearchCard from "@/components/DestinationSearchCard";
-import BudgetDropdowns from "@/components/BudgetDropdowns";
+import BudgetCard from "@/components/BudgetCard";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import PersonalPreferencesCard from "@/components/PersonalPreferencesCard";
 import { api, getTokens } from "@/lib/api";
@@ -74,6 +74,7 @@ const TripRoom = () => {
   const [availSlots, setAvailSlots] = useState<any[]>([]);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [budgetEstimate, setBudgetEstimate] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -92,6 +93,7 @@ const TripRoom = () => {
       setAvailSlots(data.availability_slots ?? []);
       setDeadlines(data.deadlines ?? []);
       setDestinations(data.destinations ?? []);
+      setBudgetEstimate(data.budget_estimate ?? null);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Trip not found");
@@ -104,48 +106,58 @@ const TripRoom = () => {
     fetchTrip();
   }, [fetchTrip]);
 
+  // Stable ref to fetchTrip so Realtime callback doesn't cause re-subscriptions
+  const fetchTripRef = useRef(fetchTrip);
+  fetchTripRef.current = fetchTrip;
+
   // Supabase Realtime
   useEffect(() => {
     if (!supabase || !trip?.id) return;
 
+    const refetch = () => fetchTripRef.current();
+
     const channel = supabase
-      .channel(`trip-${trip.id}`)
+      .channel(`triproom-${trip.id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "destination_options", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
+        refetch
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "destination_votes", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
+        refetch
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "trip_members", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
+        refetch
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "trips", filter: `id=eq.${trip.id}` },
-        () => fetchTrip()
+        refetch
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "budget_preferences", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
+        refetch
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
-        () => fetchTrip()
+        refetch
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error("Realtime subscription failed:", status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, trip?.id, fetchTrip]);
+  }, [trip?.id]);
 
   // Refetch on tab focus
   useEffect(() => {
@@ -287,8 +299,6 @@ const TripRoom = () => {
   const myMember = members.find((m) => m.id === currentMemberId);
   const hasConfirmed = myMember?.has_confirmed || false;
 
-  const card2Enabled = trip.selected_destination_id !== null;
-  const card3Enabled = trip.budget_min !== null;
 
   const myPrefs = budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
 
@@ -366,28 +376,16 @@ const TripRoom = () => {
           />
         </div>
 
-        {/* Budget mismatch warning */}
-        {trip.destination_summary?.cost_breakdown && trip.budget_max !== null &&
-          trip.budget_max < trip.destination_summary.cost_breakdown.total_min && (
-          <div className="mt-4 bg-[rgba(181,80,58,0.12)] border border-terra rounded-[4px] p-4">
-            <p className="font-ui text-sm text-terra">
-              ⚠ Your budget (₹{trip.budget_max.toLocaleString("en-IN")}) may be tight for{" "}
-              {trip.destination_summary.name || "this destination"} (est. from ₹
-              {trip.destination_summary.cost_breakdown.total_min.toLocaleString("en-IN")}). Consider
-              adjusting your budget or choosing a different destination.
-            </p>
-          </div>
-        )}
-
         {/* Card 2 — Budget */}
         <div className="mt-6">
-          <BudgetDropdowns
+          <BudgetCard
             joinToken={joinToken!}
-            trip={trip}
-            isOrganiser={isOrganiser}
+            budgetPrefs={budgetPrefs}
+            members={members}
+            currentMemberId={currentMemberId}
             onTripUpdated={fetchTrip}
-            disabled={!card2Enabled}
             deadline={budgetDeadline}
+            cachedAnalysis={budgetEstimate?.breakdown ?? null}
           />
         </div>
 
@@ -401,7 +399,6 @@ const TripRoom = () => {
             currentMemberId={currentMemberId}
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
-            disabled={!card3Enabled}
             availabilityDeadline={availDeadline}
           />
         </div>
