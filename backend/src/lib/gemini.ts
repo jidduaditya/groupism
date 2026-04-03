@@ -186,18 +186,67 @@ export async function getDestinationSummary(params: {
   nights: number;
   budgetMin?: number;
   budgetMax?: number;
+  memberPreferences?: Array<{
+    accommodation_tier: string | null;
+    transport_pref: string | null;
+    dining_style: string | null;
+    activities: string[] | null;
+  }>;
 }): Promise<DestinationSummaryResult> {
 
   const budgetContext = params.budgetMin && params.budgetMax
     ? `The group's budget is ₹${params.budgetMin.toLocaleString('en-IN')} – ₹${params.budgetMax.toLocaleString('en-IN')} per person.`
     : '';
 
-  if (params.source === 'ai' && !params.query) {
+  // Build member preferences summary for AI context
+  let prefsContext = '';
+  if (params.memberPreferences && params.memberPreferences.length > 0) {
+    const accomCounts: Record<string, number> = {};
+    const transportCounts: Record<string, number> = {};
+    const diningCounts: Record<string, number> = {};
+    const activityCounts: Record<string, number> = {};
+
+    for (const p of params.memberPreferences) {
+      if (p.accommodation_tier) accomCounts[p.accommodation_tier] = (accomCounts[p.accommodation_tier] || 0) + 1;
+      if (p.transport_pref) transportCounts[p.transport_pref] = (transportCounts[p.transport_pref] || 0) + 1;
+      if (p.dining_style) diningCounts[p.dining_style] = (diningCounts[p.dining_style] || 0) + 1;
+      if (p.activities) {
+        for (const a of p.activities) {
+          activityCounts[a] = (activityCounts[a] || 0) + 1;
+        }
+      }
+    }
+
+    const parts: string[] = [];
+    const summarize = (label: string, counts: Record<string, number>) => {
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      if (entries.length > 0) {
+        parts.push(`${label}: ${entries.map(([k, v]) => `${v} prefer ${k}`).join(', ')}`);
+      }
+    };
+    summarize('Accommodation', accomCounts);
+    summarize('Transport', transportCounts);
+    summarize('Dining', diningCounts);
+    if (Object.keys(activityCounts).length > 0) {
+      const topActivities = Object.entries(activityCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k);
+      parts.push(`Popular activities: ${topActivities.join(', ')}`);
+    }
+
+    if (parts.length > 0) {
+      prefsContext = `\nGroup member preferences:\n${parts.join('\n')}`;
+    }
+  }
+
+  if (params.source === 'ai') {
+    const userRequest = params.query
+      ? `\nThe group is looking for: ${params.query}`
+      : '';
+
     const prompt = `You are a travel expert for Indian domestic group travel.
 
 Group size: ${params.groupSize} people
 Trip duration: ${params.nights} nights
-${budgetContext}
+${budgetContext}${prefsContext}${userRequest}
 
 Suggest exactly 3 destination names for this group. Just the names, no explanation.
 

@@ -74,6 +74,12 @@ router.post('/summary', loadTrip, async (req, res) => {
     ? Math.max(1, Math.ceil((new Date(trip.travel_to).getTime() - new Date(trip.travel_from).getTime()) / 86400000))
     : 3;
 
+  // Fetch member preferences to enrich AI context
+  const { data: prefs } = await supabase
+    .from('budget_preferences')
+    .select('accommodation_tier, transport_pref, dining_style, activities')
+    .eq('trip_id', trip.id);
+
   try {
     const result = await getDestinationSummary({
       query: query || null,
@@ -82,6 +88,7 @@ router.post('/summary', loadTrip, async (req, res) => {
       nights,
       budgetMin: trip.budget_min ?? undefined,
       budgetMax: trip.budget_max ?? undefined,
+      memberPreferences: prefs ?? [],
     });
     res.json(result);
   } catch {

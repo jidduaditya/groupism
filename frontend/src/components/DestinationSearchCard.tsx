@@ -44,6 +44,7 @@ export default function DestinationSearchCard({
     hasExistingDestination ? { mode: "selected" } : { mode: "search" }
   );
   const [searchValue, setSearchValue] = useState("");
+  const [aiPromptValue, setAiPromptValue] = useState("");
   const [selecting, setSelecting] = useState(false);
 
   async function handleSearch() {
@@ -85,7 +86,7 @@ export default function DestinationSearchCard({
     try {
       const res = await api.post(
         `/api/trips/${joinToken}/destinations/summary`,
-        { query: null, source: "ai" },
+        { query: aiPromptValue.trim() || null, source: "ai" },
         joinToken
       );
 
@@ -197,39 +198,52 @@ export default function DestinationSearchCard({
       {/* Search mode */}
       {view.mode === "search" && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t-tertiary text-base pointer-events-none">
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              </span>
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSearch();
-                }}
-                placeholder="Search a destination..."
-                className="w-full h-11 pl-10 pr-4 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors"
-              />
-            </div>
+          {/* Direct search */}
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-t-tertiary text-base pointer-events-none">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearch();
+              }}
+              placeholder="Search a destination..."
+              className="w-full h-11 pl-10 pr-4 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors"
+            />
+          </div>
+
+          {/* AI suggest */}
+          <div className="border-t border-b-subtle pt-4">
+            <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
+              Or let AI suggest
+            </p>
+            <textarea
+              value={aiPromptValue}
+              onChange={(e) => setAiPromptValue(e.target.value)}
+              placeholder="e.g. beach + nightlife, or quiet hills for families..."
+              rows={2}
+              className="w-full px-4 py-3 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors resize-none"
+            />
             <button
               onClick={handleAiSuggest}
-              className="h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap"
+              className="mt-2 h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap"
             >
-              Let AI suggest
+              Suggest →
             </button>
           </div>
         </div>
