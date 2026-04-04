@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -47,14 +47,6 @@ function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDateDisplay(d: string): string {
-  return new Date(d).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -63,6 +55,121 @@ function getFirstDayOfWeek(year: number, month: number): number {
   // 0=Sun, convert so Mon=0
   const day = new Date(year, month, 1).getDay();
   return day === 0 ? 6 : day - 1;
+}
+
+interface OverlapWindow {
+  start: string;
+  end: string;
+  days: number;
+  memberCount: number;
+  totalMembers: number;
+}
+
+function computeOverlapWindows(
+  availSlots: Array<{ member_id: string; slot_date: string; tier: string }>
+): OverlapWindow[] {
+  // Count submitted members
+  const submittedIds = new Set<string>();
+  for (const slot of availSlots) submittedIds.add(slot.member_id);
+  const submittedCount = submittedIds.size;
+  if (submittedCount === 0) return [];
+
+  const threshold = Math.max(2, Math.ceil(submittedCount * 0.5));
+
+  // Build map: date -> count of members with free or could_work
+  const dateAvailCount = new Map<string, number>();
+  const dateMemberSeen = new Map<string, Set<string>>();
+
+  for (const slot of availSlots) {
+    if (slot.tier !== "free" && slot.tier !== "could_work") continue;
+    if (!dateMemberSeen.has(slot.slot_date)) {
+      dateMemberSeen.set(slot.slot_date, new Set());
+    }
+    const seen = dateMemberSeen.get(slot.slot_date)!;
+    if (!seen.has(slot.member_id)) {
+      seen.add(slot.member_id);
+      dateAvailCount.set(
+        slot.slot_date,
+        (dateAvailCount.get(slot.slot_date) ?? 0) + 1
+      );
+    }
+  }
+
+  // Get qualifying dates sorted
+  const qualifyingDates = Array.from(dateAvailCount.entries())
+    .filter(([, count]) => count >= threshold)
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (qualifyingDates.length === 0) return [];
+
+  // Group into consecutive windows
+  const windows: OverlapWindow[] = [];
+  let windowStart = qualifyingDates[0];
+  let windowEnd = qualifyingDates[0];
+  let minCount = qualifyingDates[0].count;
+
+  for (let i = 1; i < qualifyingDates.length; i++) {
+    const prev = new Date(qualifyingDates[i - 1].date + "T00:00:00");
+    const curr = new Date(qualifyingDates[i].date + "T00:00:00");
+    const diffDays =
+      (curr.getTime() - prev.getTime()) / 86400000;
+
+    if (diffDays === 1) {
+      windowEnd = qualifyingDates[i];
+      minCount = Math.min(minCount, qualifyingDates[i].count);
+    } else {
+      const days =
+        Math.round(
+          (new Date(windowEnd.date + "T00:00:00").getTime() -
+            new Date(windowStart.date + "T00:00:00").getTime()) /
+            86400000
+        ) + 1;
+      if (days >= 2) {
+        windows.push({
+          start: windowStart.date,
+          end: windowEnd.date,
+          days,
+          memberCount: minCount,
+          totalMembers: submittedCount,
+        });
+      }
+      windowStart = qualifyingDates[i];
+      windowEnd = qualifyingDates[i];
+      minCount = qualifyingDates[i].count;
+    }
+  }
+
+  // Final window
+  const days =
+    Math.round(
+      (new Date(windowEnd.date + "T00:00:00").getTime() -
+        new Date(windowStart.date + "T00:00:00").getTime()) /
+        86400000
+    ) + 1;
+  if (days >= 2) {
+    windows.push({
+      start: windowStart.date,
+      end: windowEnd.date,
+      days,
+      memberCount: minCount,
+      totalMembers: submittedCount,
+    });
+  }
+
+  // Sort: most members first, then longest
+  windows.sort(
+    (a, b) => b.memberCount - a.memberCount || b.days - a.days
+  );
+
+  return windows;
+}
+
+function formatShortDate(d: string): string {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 export default function AvailabilityCalendar({
@@ -83,11 +190,6 @@ export default function AvailabilityCalendar({
     trip.deadline ?? ""
   );
 
-  // Travel date editing state
-  const [travelFrom, setTravelFrom] = useState<string>(trip.travel_from ?? "");
-  const [travelTo, setTravelTo] = useState<string>(trip.travel_to ?? "");
-  const dateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Month navigation
   const [currentMonth, setCurrentMonth] = useState(() => {
     const anchor = trip.travel_from
@@ -103,12 +205,6 @@ export default function AvailabilityCalendar({
       setCurrentMonth(new Date(d.getFullYear(), d.getMonth(), 1));
     }
   }, [trip.travel_from]);
-
-  // Sync travel dates from props
-  useEffect(() => {
-    setTravelFrom(trip.travel_from ?? "");
-    setTravelTo(trip.travel_to ?? "");
-  }, [trip.travel_from, trip.travel_to]);
 
   // Keep local slots in sync
   useEffect(() => {
@@ -149,15 +245,6 @@ export default function AvailabilityCalendar({
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
-
-  // Travel window range for highlighting
-  const travelRange = useMemo(() => {
-    if (!trip.travel_from || !trip.travel_to) return null;
-    return {
-      from: trip.travel_from,
-      to: trip.travel_to,
-    };
-  }, [trip.travel_from, trip.travel_to]);
 
   // Build calendar days for current month
   const calendarCells = useMemo(() => {
@@ -256,39 +343,6 @@ export default function AvailabilityCalendar({
     [joinToken, onTripUpdated, trip.deadline]
   );
 
-  const saveDate = useCallback(
-    async (from: string, to: string) => {
-      if (!isOrganiser) return;
-      try {
-        await api.patch(
-          `/api/trips/${joinToken}`,
-          { travel_from: from || null, travel_to: to || null },
-          joinToken
-        );
-        onTripUpdated();
-      } catch {
-        toast({ title: "Failed to save dates", variant: "destructive" });
-      }
-    },
-    [isOrganiser, joinToken, onTripUpdated]
-  );
-
-  const handleDateChange = (field: "from" | "to", value: string) => {
-    const newFrom = field === "from" ? value : travelFrom;
-    const newTo = field === "to" ? value : travelTo;
-    if (field === "from") setTravelFrom(value);
-    else setTravelTo(value);
-
-    if (dateDebounceRef.current) clearTimeout(dateDebounceRef.current);
-    dateDebounceRef.current = setTimeout(() => saveDate(newFrom, newTo), 800);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (dateDebounceRef.current) clearTimeout(dateDebounceRef.current);
-    };
-  }, []);
-
   // Navigation
   const prevMonth = () =>
     setCurrentMonth(
@@ -299,11 +353,12 @@ export default function AvailabilityCalendar({
       (m) => new Date(m.getFullYear(), m.getMonth() + 1, 1)
     );
 
-  function isInTravelRange(date: Date): boolean {
-    if (!travelRange) return false;
-    const key = dateKey(date);
-    return key >= travelRange.from && key <= travelRange.to;
-  }
+  // Overlap windows
+  const overlapWindows = useMemo(
+    () => computeOverlapWindows(localSlots),
+    [localSlots]
+  );
+  const topWindow = overlapWindows.length > 0 ? overlapWindows[0] : null;
 
   function renderStrips(date: Date) {
     const key = dateKey(date);
@@ -346,48 +401,6 @@ export default function AvailabilityCalendar({
       <h2 className="font-display text-2xl font-bold text-t-primary mb-1">
         When can everyone go?
       </h2>
-
-      {/* Travel dates — organiser sets, everyone sees */}
-      <div className="mb-6">
-        <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-3">
-          When are you travelling?
-        </p>
-        {isOrganiser ? (
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="font-ui text-xs text-t-secondary block mb-1">
-                From
-              </label>
-              <input
-                type="date"
-                value={travelFrom}
-                onChange={(e) => handleDateChange("from", e.target.value)}
-                className="w-full h-10 px-3 bg-surface border border-b-mid rounded-[4px] font-mono text-sm text-t-primary focus:outline-none focus:border-amber transition-colors"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="font-ui text-xs text-t-secondary block mb-1">
-                To
-              </label>
-              <input
-                type="date"
-                value={travelTo}
-                min={travelFrom}
-                onChange={(e) => handleDateChange("to", e.target.value)}
-                className="w-full h-10 px-3 bg-surface border border-b-mid rounded-[4px] font-mono text-sm text-t-primary focus:outline-none focus:border-amber transition-colors"
-              />
-            </div>
-          </div>
-        ) : (
-          <p className="font-mono text-sm text-t-primary">
-            {trip.travel_from && trip.travel_to ? (
-              `${formatDateDisplay(trip.travel_from)} → ${formatDateDisplay(trip.travel_to)}`
-            ) : (
-              <span className="text-t-tertiary">Dates not set yet</span>
-            )}
-          </p>
-        )}
-      </div>
 
       {/* Tap instruction */}
       <p className="font-ui text-xs text-t-tertiary mb-4">
@@ -442,7 +455,9 @@ export default function AvailabilityCalendar({
           const { date } = cell;
           const key = dateKey(date);
           const isPast = date < today;
-          const inRange = isInTravelRange(date);
+          const isInTopWindow = topWindow
+            ? key >= topWindow.start && key <= topWindow.end
+            : false;
           const myEntry = currentMemberId
             ? localSlots.find(
                 (s) => s.member_id === currentMemberId && s.slot_date === key
@@ -460,7 +475,7 @@ export default function AvailabilityCalendar({
               className={cn(
                 "min-h-[44px] sm:min-h-[52px] p-1 border border-b-subtle/50 flex flex-col items-start",
                 "transition-colors rounded-[4px]",
-                inRange && "bg-[rgba(240,234,214,0.06)]",
+                isInTopWindow && "bg-[rgba(58,125,92,0.08)]",
                 myEntry && "ring-1 ring-inset ring-amber/40",
                 isPast
                   ? "opacity-30 cursor-not-allowed"
@@ -474,6 +489,42 @@ export default function AvailabilityCalendar({
             </button>
           );
         })}
+      </div>
+
+      {/* Overlap windows */}
+      <div className="mt-4 pt-4 border-t border-b-subtle">
+        {submittedCount === 0 ? (
+          <p className="font-ui text-sm text-t-tertiary">
+            Add your availability above to see when the group can go.
+          </p>
+        ) : overlapWindows.length === 0 ? (
+          <p className="font-ui text-sm text-t-tertiary">
+            No overlapping dates yet — keep adding availability.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
+              Best windows
+            </p>
+            {overlapWindows.map((w, i) => (
+              <div
+                key={`${w.start}-${w.end}`}
+                className={cn(
+                  "flex items-baseline justify-between font-ui text-sm",
+                  i === 0 ? "text-accent-green" : "text-t-secondary"
+                )}
+              >
+                <span>
+                  {formatShortDate(w.start)} – {formatShortDate(w.end)}{" "}
+                  <span className="text-xs opacity-70">({w.days} days)</span>
+                </span>
+                <span className="text-xs">
+                  {w.memberCount} of {w.totalMembers} can make it
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Legend */}
