@@ -520,16 +520,6 @@ export default function AvailabilityCalendar({
         <div className="flex flex-wrap gap-2 items-center">
           <button
             type="button"
-            onClick={handleClearAll}
-            className="h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer text-accent-terra border-b-mid hover:border-accent-terra hover:bg-accent-terra/10"
-          >
-            Clear all my dates
-          </button>
-
-          <div className="w-px h-6 bg-[var(--border-subtle)] mx-1" />
-
-          <button
-            type="button"
             onClick={() => {
               if (rangeMode) {
                 setRangeMode(false);
@@ -541,7 +531,7 @@ export default function AvailabilityCalendar({
             className={cn(
               "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
               rangeMode
-                ? "border-accent-amber bg-accent-amber/10 text-accent-amber"
+                ? "border-accent-amber bg-accent-amber text-[var(--bg-base)] font-medium shadow-[0_0_12px_rgba(184,122,8,0.4)]"
                 : "border-b-mid text-t-secondary hover:border-b-strong"
             )}
           >
@@ -549,7 +539,17 @@ export default function AvailabilityCalendar({
               ? rangeStart
                 ? "Tap end date"
                 : "Tap start date"
-              : "Range select"}
+              : "Select range"}
+          </button>
+
+          <div className="w-px h-6 bg-[var(--border-subtle)] mx-1" />
+
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer text-accent-terra border-b-mid hover:border-accent-terra hover:bg-accent-terra/10"
+          >
+            Clear all my dates
           </button>
         </div>
       </div>
