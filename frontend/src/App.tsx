@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import MapBackground from "@/components/MapBackground";
 import Index from "./pages/Index.tsx";
-import CreateTrip from "./pages/CreateTrip.tsx";
 import TripRoom from "./pages/TripRoom.tsx";
 import JoinTrip from "./pages/JoinTrip.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -21,7 +20,6 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/create" element={<CreateTrip />} />
           <Route path="/trip/:id" element={<TripRoom />} />
           <Route path="/join/:code" element={<JoinTrip />} />
           <Route path="/t/:code" element={<JoinTrip />} />
