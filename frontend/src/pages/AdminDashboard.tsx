@@ -3,6 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 
+const ADMIN_API = 'https://groupism-production.up.railway.app/api/admin/analytics';
+
 interface AnalyticsData {
   trips: {
     total: number;
@@ -51,7 +53,7 @@ function PasswordGate({ onAuth }: { onAuth: (password: string) => void }) {
     setError(false);
 
     try {
-      const res = await fetch('/api/admin/analytics', {
+      const res = await fetch(ADMIN_API, {
         headers: { 'x-admin-password': password },
       });
 
@@ -157,7 +159,7 @@ function Dashboard({ password }: { password: string }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/analytics', {
+      const res = await fetch(ADMIN_API, {
         headers: { 'x-admin-password': passwordRef.current },
       });
       if (!res.ok) throw new Error('fetch failed');
