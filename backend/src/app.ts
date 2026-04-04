@@ -51,6 +51,12 @@ app.use('/api/trips/:joinToken/deadlines',    deadlinesRouter);
 app.use('/api/trips/:joinToken/insights',    insightsRouter);
 app.use('/api/admin',                        adminRouter);
 
+// ─── Startup reminder ─────────────────────────────────────────────────────────
+console.info(
+  '\n[MIGRATION REMINDER] Run migration_realtime_fix.sql in Supabase SQL Editor' +
+  '\nto ensure Realtime publication covers all tables.\n',
+);
+
 // ─── 404 fallthrough ─────────────────────────────────────────────────────────
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
