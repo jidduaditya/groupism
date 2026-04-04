@@ -60,7 +60,10 @@ const MEMBER_COLOURS = [
 ];
 
 function dateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -213,8 +216,6 @@ export default function AvailabilityCalendar({
   );
 
   // Binary model: tap = available, tap again = clear
-  // clearMode: when true, tapping/range-selecting clears dates
-  const [clearMode, setClearMode] = useState(false);
   const [rangeMode, setRangeMode] = useState(false);
   const [rangeStart, setRangeStart] = useState<string | null>(null);
 
@@ -388,25 +389,31 @@ export default function AvailabilityCalendar({
       if (rangeMode && rangeStart) {
         // Second tap: apply range
         const range = getDateRange(rangeStart, key);
-        applyTierToDates(range, clearMode ? null : "free");
+        applyTierToDates(range, "free");
         setRangeStart(null);
         setRangeMode(false);
       } else if (rangeMode) {
         // First tap in range mode: set start
         setRangeStart(key);
       } else {
-        // Single tap: toggle — if available clear it, if clear mark it
-        // In clearMode, always clear; otherwise toggle
-        if (clearMode) {
-          applyTierToDates([key], null);
-        } else {
-          const alreadyAvailable = hasSlot(key);
-          applyTierToDates([key], alreadyAvailable ? null : "free");
-        }
+        // Single tap: toggle availability
+        const alreadyAvailable = hasSlot(key);
+        applyTierToDates([key], alreadyAvailable ? null : "free");
       }
     },
-    [currentMemberId, rangeMode, rangeStart, clearMode, applyTierToDates, hasSlot]
+    [currentMemberId, rangeMode, rangeStart, applyTierToDates, hasSlot]
   );
+
+  // Bulk-clear all current user's dates
+  const handleClearAll = useCallback(() => {
+    if (!currentMemberId) return;
+    const myDateKeys = localSlots
+      .filter((s) => s.member_id === currentMemberId)
+      .map((s) => s.slot_date);
+    if (myDateKeys.length === 0) return;
+    if (!window.confirm("Clear all your dates? This can't be undone.")) return;
+    applyTierToDates(myDateKeys, null);
+  }, [currentMemberId, localSlots, applyTierToDates]);
 
   const handleDeadlineChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -493,7 +500,7 @@ export default function AvailabilityCalendar({
         When can everyone go?
       </h2>
 
-      {/* ─── Controls: Clear mode + Range select ─── */}
+      {/* ─── Controls: Clear all + Range select ─── */}
       <div className="mb-4">
         <p className="font-ui text-xs text-t-tertiary mb-2">
           Tap dates to mark yourself available. Tap again to clear.
@@ -501,21 +508,10 @@ export default function AvailabilityCalendar({
         <div className="flex flex-wrap gap-2 items-center">
           <button
             type="button"
-            onClick={() => {
-              setClearMode((prev) => !prev);
-              if (rangeStart) {
-                setRangeStart(null);
-                setRangeMode(false);
-              }
-            }}
-            className={cn(
-              "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
-              clearMode
-                ? "text-accent-terra border-accent-terra bg-accent-terra/10"
-                : "text-t-secondary border-b-mid hover:border-b-strong"
-            )}
+            onClick={handleClearAll}
+            className="h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer text-accent-terra border-b-mid hover:border-accent-terra hover:bg-accent-terra/10"
           >
-            {clearMode ? "Clear mode on" : "Clear mode"}
+            Clear all my dates
           </button>
 
           <div className="w-px h-6 bg-[var(--border-subtle)] mx-1" />

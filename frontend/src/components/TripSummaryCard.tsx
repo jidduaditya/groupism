@@ -5,6 +5,8 @@ interface TripSummaryCardProps {
     selected_destination_id: string | null;
     travel_from: string | null;
     travel_to: string | null;
+    group_activity_notes?: string | null;
+    group_anything_else?: string | null;
   };
   destinations: Array<{
     id: string;
@@ -84,10 +86,17 @@ export default function TripSummaryCard({
     ? groupInsights.vibe_summary.split(".")[0] + "."
     : null;
 
+  // Group notes
+  const rawNotes = [trip.group_activity_notes, trip.group_anything_else]
+    .filter(Boolean)
+    .join(" · ");
+  const notesSnippet =
+    rawNotes.length > 120 ? rawNotes.slice(0, 120) + "…" : rawNotes || null;
+
   // If nothing to show, don't render
   const hasDest = selectedDest || destinations.length > 0;
   const hasBudget = avgMin !== null;
-  const hasActivities = topCats.length > 0 || !!vibeSnippet;
+  const hasActivities = topCats.length > 0 || !!vibeSnippet || !!notesSnippet;
   if (!hasDest && !hasBudget && !hasActivities) return null;
 
   return (
@@ -164,11 +173,16 @@ export default function TripSummaryCard({
               ))}
             </div>
           ) : null}
+          {notesSnippet && (
+            <p className="font-ui text-xs text-t-secondary leading-relaxed italic">
+              &ldquo;{notesSnippet}&rdquo;
+            </p>
+          )}
           {vibeSnippet ? (
-            <p className="font-ui text-xs text-t-secondary leading-relaxed">
+            <p className="font-ui text-xs text-t-secondary leading-relaxed mt-1">
               {vibeSnippet}
             </p>
-          ) : topCats.length === 0 ? (
+          ) : !notesSnippet && topCats.length === 0 ? (
             <p className="font-mono text-sm text-t-tertiary">—</p>
           ) : null}
         </div>
