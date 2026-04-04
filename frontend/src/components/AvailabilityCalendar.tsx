@@ -31,9 +31,6 @@ interface AvailabilityCalendarProps {
   travelWindows?: { windows: AIWindow[] } | null;
 }
 
-type Tier = "free" | "could_work" | "unavailable";
-type PickableTier = Tier | "clear";
-
 const DAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const FULL_MONTH_NAMES = [
@@ -61,27 +58,6 @@ const MEMBER_COLOURS = [
   { bg: "rgba(168, 85, 247, 0.25)", border: "#A855F7", label: "Purple" },
   { bg: "rgba(34, 197, 94, 0.25)", border: "#22C55E", label: "Lime" },
 ];
-
-const TIER_LABELS: Record<PickableTier, string> = {
-  free: "Free",
-  could_work: "Could work",
-  unavailable: "Unavailable",
-  clear: "Clear",
-};
-
-const TIER_COLORS: Record<PickableTier, string> = {
-  free: "text-accent-green border-accent-green bg-accent-green/10",
-  could_work: "text-accent-amber border-accent-amber bg-accent-amber/10",
-  unavailable: "text-accent-terra border-accent-terra bg-accent-terra/10",
-  clear: "text-t-secondary border-b-mid bg-transparent",
-};
-
-const TIER_INACTIVE: Record<PickableTier, string> = {
-  free: "text-t-secondary border-b-mid hover:border-accent-green/40",
-  could_work: "text-t-secondary border-b-mid hover:border-accent-amber/40",
-  unavailable: "text-t-secondary border-b-mid hover:border-accent-terra/40",
-  clear: "text-t-tertiary border-b-subtle hover:border-b-mid",
-};
 
 function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -236,8 +212,9 @@ export default function AvailabilityCalendar({
     trip.deadline ?? ""
   );
 
-  // New interaction model: tier picker + range selection
-  const [selectedTier, setSelectedTier] = useState<PickableTier>("free");
+  // Binary model: tap = available, tap again = clear
+  // clearMode: when true, tapping/range-selecting clears dates
+  const [clearMode, setClearMode] = useState(false);
   const [rangeMode, setRangeMode] = useState(false);
   const [rangeStart, setRangeStart] = useState<string | null>(null);
 
@@ -317,20 +294,20 @@ export default function AvailabilityCalendar({
   // Ref for pending API calls
   const pendingRef = useRef(false);
 
-  // Apply tier to a list of date keys
+  // Apply availability to a list of date keys
+  // tier: "free" to mark available, null to clear
   const applyTierToDates = useCallback(
-    async (dateKeys: string[], tier: PickableTier) => {
+    async (dateKeys: string[], tier: "free" | null) => {
       if (!currentMemberId || pendingRef.current) return;
       pendingRef.current = true;
 
-      const apiTier: string | null = tier === "clear" ? null : tier;
       const previousSlots = [...localSlots];
 
       // Optimistic update
       setLocalSlots((prev) => {
         let slots = [...prev];
         for (const dk of dateKeys) {
-          if (apiTier === null) {
+          if (tier === null) {
             slots = slots.filter(
               (s) =>
                 !(s.member_id === currentMemberId && s.slot_date === dk)
@@ -340,12 +317,12 @@ export default function AvailabilityCalendar({
               (s) => s.member_id === currentMemberId && s.slot_date === dk
             );
             if (idx >= 0) {
-              slots[idx] = { ...slots[idx], tier: apiTier };
+              slots[idx] = { ...slots[idx], tier };
             } else {
               slots.push({
                 member_id: currentMemberId,
                 slot_date: dk,
-                tier: apiTier,
+                tier,
               });
             }
           }
@@ -358,7 +335,7 @@ export default function AvailabilityCalendar({
           dateKeys.map((dk) =>
             api.post(
               `/api/trips/${joinToken}/availability`,
-              { slot: { date: dk, tier: apiTier } },
+              { slot: { date: dk, tier } },
               joinToken
             )
           )
@@ -392,6 +369,17 @@ export default function AvailabilityCalendar({
     ]
   );
 
+  // Check if current user has a slot on a given date
+  const hasSlot = useCallback(
+    (key: string): boolean => {
+      if (!currentMemberId) return false;
+      return localSlots.some(
+        (s) => s.member_id === currentMemberId && s.slot_date === key
+      );
+    },
+    [currentMemberId, localSlots]
+  );
+
   const handleCellTap = useCallback(
     (date: Date) => {
       if (!currentMemberId) return;
@@ -400,20 +388,24 @@ export default function AvailabilityCalendar({
       if (rangeMode && rangeStart) {
         // Second tap: apply range
         const range = getDateRange(rangeStart, key);
-        applyTierToDates(range, selectedTier);
+        applyTierToDates(range, clearMode ? null : "free");
         setRangeStart(null);
         setRangeMode(false);
       } else if (rangeMode) {
         // First tap in range mode: set start
         setRangeStart(key);
-        // Also apply tier to start date immediately
-        applyTierToDates([key], selectedTier);
       } else {
-        // Single tap mode: apply tier to one date
-        applyTierToDates([key], selectedTier);
+        // Single tap: toggle — if available clear it, if clear mark it
+        // In clearMode, always clear; otherwise toggle
+        if (clearMode) {
+          applyTierToDates([key], null);
+        } else {
+          const alreadyAvailable = hasSlot(key);
+          applyTierToDates([key], alreadyAvailable ? null : "free");
+        }
       }
     },
-    [currentMemberId, rangeMode, rangeStart, selectedTier, applyTierToDates]
+    [currentMemberId, rangeMode, rangeStart, clearMode, applyTierToDates, hasSlot]
   );
 
   const handleDeadlineChange = useCallback(
@@ -471,27 +463,15 @@ export default function AvailabilityCalendar({
           if (!colour) return null;
 
           const isCurrentUser = entry.member_id === currentMemberId;
-          const opacity =
-            entry.tier === "free"
-              ? 1
-              : entry.tier === "could_work"
-              ? 0.6
-              : 1;
 
           return (
             <div
               key={`${entry.member_id}-${i}`}
               className={cn(
                 "h-1 rounded-[1px] w-full",
-                isCurrentUser && "ring-1 ring-amber ring-offset-0",
-                entry.tier === "unavailable" &&
-                  "bg-[repeating-linear-gradient(135deg,transparent,transparent_2px,currentColor_2px,currentColor_3px)]"
+                isCurrentUser && "ring-1 ring-amber ring-offset-0"
               )}
-              style={
-                entry.tier === "unavailable"
-                  ? { color: colour.border, opacity: 0.5 }
-                  : { backgroundColor: colour.border, opacity }
-              }
+              style={{ backgroundColor: colour.border }}
             />
           );
         })}
@@ -499,17 +479,12 @@ export default function AvailabilityCalendar({
     );
   }
 
-  // Get tier indicator color for a cell (current user's tier on that date)
-  function getCellTierIndicator(key: string): string | null {
-    if (!currentMemberId) return null;
-    const entry = localSlots.find(
+  // Check if current user is available on this date
+  function isDateAvailable(key: string): boolean {
+    if (!currentMemberId) return false;
+    return localSlots.some(
       (s) => s.member_id === currentMemberId && s.slot_date === key
     );
-    if (!entry) return null;
-    if (entry.tier === "free") return "ring-accent-green/50";
-    if (entry.tier === "could_work") return "ring-accent-amber/50";
-    if (entry.tier === "unavailable") return "ring-accent-terra/50";
-    return null;
   }
 
   return (
@@ -518,40 +493,33 @@ export default function AvailabilityCalendar({
         When can everyone go?
       </h2>
 
-      {/* ─── Tier Picker ─── */}
+      {/* ─── Controls: Clear mode + Range select ─── */}
       <div className="mb-4">
         <p className="font-ui text-xs text-t-tertiary mb-2">
-          Select a status, then tap dates to mark them
+          Tap dates to mark yourself available. Tap again to clear.
         </p>
         <div className="flex flex-wrap gap-2 items-center">
-          {(["free", "could_work", "unavailable", "clear"] as PickableTier[]).map(
-            (tier) => (
-              <button
-                key={tier}
-                type="button"
-                onClick={() => {
-                  setSelectedTier(tier);
-                  // Exit range mode if switching tier
-                  if (rangeStart) {
-                    setRangeStart(null);
-                    setRangeMode(false);
-                  }
-                }}
-                className={cn(
-                  "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
-                  selectedTier === tier
-                    ? TIER_COLORS[tier]
-                    : TIER_INACTIVE[tier]
-                )}
-              >
-                {TIER_LABELS[tier]}
-              </button>
-            )
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setClearMode((prev) => !prev);
+              if (rangeStart) {
+                setRangeStart(null);
+                setRangeMode(false);
+              }
+            }}
+            className={cn(
+              "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
+              clearMode
+                ? "text-accent-terra border-accent-terra bg-accent-terra/10"
+                : "text-t-secondary border-b-mid hover:border-b-strong"
+            )}
+          >
+            {clearMode ? "Clear mode on" : "Clear mode"}
+          </button>
 
           <div className="w-px h-6 bg-[var(--border-subtle)] mx-1" />
 
-          {/* Range select toggle */}
           <button
             type="button"
             onClick={() => {
@@ -630,7 +598,7 @@ export default function AvailabilityCalendar({
           const isInTopWindow = topWindow
             ? key >= topWindow.start && key <= topWindow.end
             : false;
-          const tierRing = getCellTierIndicator(key);
+          const available = isDateAvailable(key);
           const isRangeStart = rangePreviewSet.has(key);
 
           return (
@@ -645,7 +613,7 @@ export default function AvailabilityCalendar({
                 "min-h-[44px] sm:min-h-[52px] p-1 border border-b-subtle/50 flex flex-col items-start",
                 "transition-all rounded-[4px]",
                 isInTopWindow && "bg-[rgba(58,125,92,0.08)]",
-                tierRing && `ring-1 ring-inset ${tierRing}`,
+                available && "ring-1 ring-inset ring-accent-green/50 bg-[rgba(46,107,74,0.06)]",
                 isRangeStart &&
                   "ring-2 ring-inset ring-accent-amber shadow-sm",
                 isPast
@@ -791,20 +759,8 @@ export default function AvailabilityCalendar({
         </div>
         <div className="flex gap-4">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-1 rounded-[1px] bg-t-secondary" />
-            <span className="font-ui text-xs text-t-tertiary">Free</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-1 rounded-[1px] bg-t-secondary opacity-50" />
-            <span className="font-ui text-xs text-t-tertiary">
-              Could work
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-1 rounded-[1px] bg-[repeating-linear-gradient(135deg,transparent,transparent_1px,var(--text-secondary)_1px,var(--text-secondary)_2px)]" />
-            <span className="font-ui text-xs text-t-tertiary">
-              Unavailable
-            </span>
+            <div className="w-3 h-1 rounded-[1px] bg-accent-green" />
+            <span className="font-ui text-xs text-t-tertiary">Available</span>
           </div>
         </div>
       </div>

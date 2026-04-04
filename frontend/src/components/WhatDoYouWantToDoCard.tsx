@@ -96,11 +96,12 @@ export default function WhatDoYouWantToDoCard({
           { group_activity_notes: text },
           joinToken
         );
+        onRefresh();
       } catch {
         // silent fail
       }
     },
-    [joinToken]
+    [joinToken, onRefresh]
   );
 
   const handleNotesChange = (value: string) => {

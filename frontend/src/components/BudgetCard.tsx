@@ -251,7 +251,7 @@ export default function BudgetCard({
         </div>
       )}
 
-      {/* Budget mismatch warning */}
+      {/* Budget mismatch warning (personal) */}
       {showMismatch && (
         <div className="mt-3 p-3 border border-accent-terra rounded-[4px] bg-[rgba(196,97,74,0.08)]">
           <p className="font-ui text-xs text-accent-terra leading-relaxed">
@@ -259,6 +259,20 @@ export default function BudgetCard({
             {destCostMax ? ` – ₹${formatINR(destCostMax)}` : ""} pp. Your
             budget of ₹{formatINR(budgetMax!)} may not cover it. Consider
             adjusting your budget or the group choosing a different destination.
+          </p>
+        </div>
+      )}
+
+      {/* Group budget mismatch warning */}
+      {trip.selected_destination_id !== null &&
+        destCostMin !== null &&
+        avgMax !== null &&
+        avgMax < destCostMin && (
+        <div className="mt-3 p-3 border border-accent-amber rounded-[4px] bg-[rgba(184,122,8,0.06)]">
+          <p className="font-ui text-xs text-accent-amber leading-relaxed">
+            Heads up — {destName} is estimated at ₹{formatINR(destCostMin)}+ per person,
+            but the group&apos;s average budget tops out at ₹{formatINR(avgMax)}.
+            You may want to discuss adjusting budgets or picking a different destination.
           </p>
         </div>
       )}

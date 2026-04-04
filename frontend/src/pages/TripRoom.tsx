@@ -10,7 +10,7 @@ import WhatDoYouWantToDoCard from "@/components/WhatDoYouWantToDoCard";
 import AnythingElseCard from "@/components/AnythingElseCard";
 import GroupInsightsPanel from "@/components/GroupInsightsPanel";
 import TripSummaryCard from "@/components/TripSummaryCard";
-import TripProgress from "@/components/TripProgress";
+
 import CollapsibleSection from "@/components/CollapsibleSection";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
@@ -477,9 +477,11 @@ const TripRoom = () => {
           }
         }
         const topCats = Object.keys(cats).slice(0, 3);
-        return topCats.length > 0
-          ? topCats.join(", ")
-          : "Activities & notes";
+        const hasNotes = !!(trip?.group_activity_notes || trip?.group_anything_else);
+        const parts: string[] = [];
+        if (topCats.length > 0) parts.push(topCats.join(", "));
+        if (hasNotes) parts.push("notes added");
+        return parts.length > 0 ? parts.join(" · ") : "Activities & notes";
       })(),
 
       insights: groupInsights?.vibe_summary
@@ -608,17 +610,6 @@ const TripRoom = () => {
             members={members}
             groupSize={trip.group_size || members.length}
             currentMemberId={currentMemberId}
-          />
-        </div>
-
-        {/* ─── Zone 2: Progress + organiser controls ─── */}
-        <div className="mb-8">
-          <TripProgress
-            destinations={destinations}
-            selectedDestinationId={trip.selected_destination_id}
-            budgetPrefs={budgetPrefs}
-            availSlots={availSlots}
-            members={members}
           />
         </div>
 
