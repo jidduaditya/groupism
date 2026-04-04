@@ -21,6 +21,7 @@ app.get('/health', (_req, res) => {
 // ─── CORS ────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
   'https://groupism-p9g9.vercel.app',
+  'https://groupism.space',
   'http://localhost:5173',
   'http://localhost:8080',
   ...(process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean),
