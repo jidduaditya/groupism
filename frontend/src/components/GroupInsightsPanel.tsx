@@ -34,26 +34,27 @@ export default function GroupInsightsPanel({
   onRefresh,
 }: GroupInsightsPanelProps) {
   const [generating, setGenerating] = useState(false);
-  const autoTriggered = useRef(false);
+  const insightsGenerating = useRef(false);
 
   // Auto-generate when ≥2 prefs and no cached insights
   useEffect(() => {
-    if (autoTriggered.current) return;
+    if (insightsGenerating.current) return;
     if (prefsCount < 2 || groupInsights) return;
-    autoTriggered.current = true;
     generate();
   }, [prefsCount, groupInsights]);
 
   // Re-trigger when insights are stale (new members submitted since last generation)
   useEffect(() => {
     if (!groupInsights) return;
-    if (generating) return;
+    if (insightsGenerating.current) return;
     if (prefsCount > groupInsights.members_used) {
       generate();
     }
   }, [prefsCount, groupInsights?.members_used]);
 
   const generate = async () => {
+    if (insightsGenerating.current) return;
+    insightsGenerating.current = true;
     setGenerating(true);
     try {
       await api.post(
@@ -65,6 +66,7 @@ export default function GroupInsightsPanel({
     } catch {
       // silent — panel stays empty
     } finally {
+      insightsGenerating.current = false;
       setGenerating(false);
     }
   };
@@ -115,7 +117,7 @@ export default function GroupInsightsPanel({
           <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
             Group vibe
           </p>
-          <p className="font-ui text-sm text-t-primary leading-relaxed">
+          <p className="font-ui text-sm text-t-secondary leading-relaxed">
             {groupInsights.vibe_summary}
           </p>
         </div>
@@ -127,16 +129,9 @@ export default function GroupInsightsPanel({
           <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
             What to plan for
           </p>
-          <ul className="space-y-1.5">
-            {itineraryLines.map((line, i) => (
-              <li key={i} className="flex items-start gap-2">
-                <span className="text-amber mt-0.5 text-xs">●</span>
-                <span className="font-ui text-sm text-t-secondary">
-                  {line.replace(/^[-•]\s*/, "")}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <p className="font-ui text-sm text-t-secondary leading-relaxed">
+            {itineraryLines.map((l) => l.replace(/^[-•]\s*/, "")).join(" ")}
+          </p>
         </div>
       )}
 
@@ -149,7 +144,7 @@ export default function GroupInsightsPanel({
           <ul className="space-y-1.5">
             {frictionFlags.map((flag, i) => (
               <li key={i} className="flex items-start gap-2">
-                <span className="text-terra mt-0.5 text-xs">⚠</span>
+                <span className="text-amber mt-0.5 text-xs">⚠</span>
                 <span className="font-ui text-sm text-t-secondary">
                   <strong className="text-t-primary">{flag.area}:</strong>{" "}
                   {flag.detail}

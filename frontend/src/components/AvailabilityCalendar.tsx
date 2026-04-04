@@ -270,6 +270,18 @@ export default function AvailabilityCalendar({
 
   const submittedCount = submittedMemberIds.size;
 
+  // Re-trigger AI windows when availability_slots change via Realtime
+  const prevSlotsLen = useRef(availSlots.length);
+  useEffect(() => {
+    if (prevSlotsLen.current === availSlots.length) return;
+    prevSlotsLen.current = availSlots.length;
+    if (!isOrganiser || submittedMemberIds.size < 2) return;
+    api
+      .post(`/api/trips/${joinToken}/availability/windows`, {}, joinToken)
+      .then(() => onTripUpdated())
+      .catch(() => {});
+  }, [availSlots.length, isOrganiser, submittedMemberIds.size, joinToken, onTripUpdated]);
+
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -676,7 +688,7 @@ export default function AvailabilityCalendar({
                 key={`${w.start_date}-${w.end_date}`}
                 className={cn(
                   "p-3 rounded-[4px] bg-[rgba(240,234,214,0.03)]",
-                  i === 0 && "border-l-2 border-l-accent-amber"
+                  i === 0 && "border-l-2 border-l-accent-green"
                 )}
               >
                 <div className="flex items-baseline justify-between">
@@ -719,12 +731,7 @@ export default function AvailabilityCalendar({
                     joinToken
                   )
                   .then(() => onTripUpdated())
-                  .catch(() =>
-                    toast({
-                      title: "Couldn't refresh best travel dates",
-                      variant: "destructive",
-                    })
-                  );
+                  .catch(() => {});
               }}
               className="font-ui text-xs text-t-tertiary hover:text-t-secondary mt-3 cursor-pointer transition-colors"
             >

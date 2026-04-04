@@ -577,7 +577,7 @@ const TripRoom = () => {
   headerParts.push(`${members.length} people`);
 
   // Whether insights should be visible at all
-  const showInsights = budgetPrefs.length >= 2;
+  const showInsights = budgetPrefs.length >= 2 || (budgetPrefs.length >= 1 && !!(trip?.group_activity_notes || trip?.group_anything_else));
 
   return (
     <div className="min-h-screen relative z-10">
