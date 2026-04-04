@@ -14,7 +14,7 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   try {
   const trip = (req as any).trip;
   const member = (req as any).member;
-  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, trip_budget_min, trip_budget_max, notes, activity_categories, activity_details } = req.body;
+  const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, trip_budget_min, trip_budget_max, notes, activity_categories, activity_details, activity_notes, anything_else } = req.body;
 
   // Validate only when provided (fields are optional for auto-save)
   if (accommodation_tier !== undefined && !ACCOMMODATION_TIERS.includes(accommodation_tier)) {
@@ -34,6 +34,12 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   }
   if (activity_details !== undefined && typeof activity_details !== 'string') {
     return res.status(400).json({ error: 'activity_details must be a string' });
+  }
+  if (activity_notes !== undefined && typeof activity_notes !== 'string') {
+    return res.status(400).json({ error: 'activity_notes must be a string' });
+  }
+  if (anything_else !== undefined && typeof anything_else !== 'string') {
+    return res.status(400).json({ error: 'anything_else must be a string' });
   }
   if (daily_budget_min != null && typeof daily_budget_min !== 'number') {
     return res.status(400).json({ error: 'daily_budget_min must be a number' });
@@ -64,6 +70,8 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
   if (trip_budget_max       !== undefined) prefData.trip_budget_max       = trip_budget_max;
   if (activity_categories   !== undefined) prefData.activity_categories   = activity_categories || [];
   if (activity_details      !== undefined) prefData.activity_details      = activity_details || null;
+  if (activity_notes        !== undefined) prefData.activity_notes        = activity_notes || null;
+  if (anything_else         !== undefined) prefData.anything_else         = anything_else || null;
 
   // Require at least one preference field
   if (Object.keys(prefData).length <= 2) {

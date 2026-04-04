@@ -143,7 +143,8 @@ router.patch('/:joinToken', loadTrip, requireOrganiser, async (req, res) => {
   res.json({ trip: safeTrip });
 });
 
-// PATCH /api/trips/:joinToken/notes — any member can update shared group notes
+// DEPRECATED — notes now stored per-member in budget_preferences (v11 migration)
+// PATCH /api/trips/:joinToken/notes — kept for backward compat, no longer called by frontend
 router.patch('/:joinToken/notes', loadTrip, requireMember, async (req, res) => {
   const trip = (req as any).trip;
   const { group_activity_notes, group_anything_else } = req.body;

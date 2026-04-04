@@ -13,18 +13,15 @@ const ACTIVITIES = [
 
 interface WhatDoYouWantToDoCardProps {
   joinToken: string;
-  trip: {
-    group_activity_notes?: string | null;
-  };
   existingPrefs: {
     activity_categories?: string[] | null;
+    activity_notes?: string | null;
   } | null;
   onRefresh: () => void;
 }
 
 export default function WhatDoYouWantToDoCard({
   joinToken,
-  trip,
   existingPrefs,
   onRefresh,
 }: WhatDoYouWantToDoCardProps) {
@@ -32,7 +29,7 @@ export default function WhatDoYouWantToDoCard({
     existingPrefs?.activity_categories ?? []
   );
   const [groupNotes, setGroupNotes] = useState<string>(
-    trip.group_activity_notes ?? ""
+    existingPrefs?.activity_notes ?? ""
   );
   const [isRecording, setIsRecording] = useState(false);
 
@@ -47,8 +44,8 @@ export default function WhatDoYouWantToDoCard({
   }, [existingPrefs?.activity_categories]);
 
   useEffect(() => {
-    setGroupNotes(trip.group_activity_notes ?? "");
-  }, [trip.group_activity_notes]);
+    setGroupNotes(existingPrefs?.activity_notes ?? "");
+  }, [existingPrefs?.activity_notes]);
 
   const toggleCategory = (cat: string) => {
     setCategories((prev) =>
@@ -87,13 +84,13 @@ export default function WhatDoYouWantToDoCard({
     };
   }, [categories, saveCategories]);
 
-  // Save group notes (shared)
+  // Save activity notes (per-member)
   const saveNotes = useCallback(
     async (text: string) => {
       try {
-        await api.patch(
-          `/api/trips/${joinToken}/notes`,
-          { group_activity_notes: text },
+        await api.post(
+          `/api/trips/${joinToken}/budget/preferences`,
+          { activity_notes: text },
           joinToken
         );
         onRefresh();

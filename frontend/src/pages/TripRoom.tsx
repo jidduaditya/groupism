@@ -477,7 +477,7 @@ const TripRoom = () => {
           }
         }
         const topCats = Object.keys(cats).slice(0, 3);
-        const hasNotes = !!(trip?.group_activity_notes || trip?.group_anything_else);
+        const hasNotes = budgetPrefs.some((p: any) => p.activity_notes || p.anything_else);
         const parts: string[] = [];
         if (topCats.length > 0) parts.push(topCats.join(", "));
         if (hasNotes) parts.push("notes added");
@@ -577,7 +577,7 @@ const TripRoom = () => {
   headerParts.push(`${members.length} people`);
 
   // Whether insights should be visible at all
-  const showInsights = budgetPrefs.length >= 2 || (budgetPrefs.length >= 1 && !!(trip?.group_activity_notes || trip?.group_anything_else));
+  const showInsights = budgetPrefs.length >= 2 || (budgetPrefs.length >= 1 && budgetPrefs.some((p: any) => p.activity_notes || p.anything_else));
 
   return (
     <div className="min-h-screen relative z-10">
@@ -708,13 +708,12 @@ const TripRoom = () => {
             <div className="space-y-3">
               <WhatDoYouWantToDoCard
                 joinToken={joinToken!}
-                trip={trip}
                 existingPrefs={myPrefs}
                 onRefresh={fetchTrip}
               />
               <AnythingElseCard
                 joinToken={joinToken!}
-                trip={trip}
+                existingPrefs={myPrefs}
                 onRefresh={fetchTrip}
               />
             </div>

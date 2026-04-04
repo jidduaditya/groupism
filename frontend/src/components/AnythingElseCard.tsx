@@ -6,18 +6,18 @@ import { api } from "@/lib/api";
 
 interface AnythingElseCardProps {
   joinToken: string;
-  trip: {
-    group_anything_else?: string | null;
-  };
+  existingPrefs: {
+    anything_else?: string | null;
+  } | null;
   onRefresh: () => void;
 }
 
 export default function AnythingElseCard({
   joinToken,
-  trip,
+  existingPrefs,
   onRefresh,
 }: AnythingElseCardProps) {
-  const [text, setText] = useState<string>(trip.group_anything_else ?? "");
+  const [text, setText] = useState<string>(existingPrefs?.anything_else ?? "");
   const [isRecording, setIsRecording] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -25,22 +25,23 @@ export default function AnythingElseCard({
 
   // Sync from props (Realtime updates)
   useEffect(() => {
-    setText(trip.group_anything_else ?? "");
-  }, [trip.group_anything_else]);
+    setText(existingPrefs?.anything_else ?? "");
+  }, [existingPrefs?.anything_else]);
 
   const saveNotes = useCallback(
     async (value: string) => {
       try {
-        await api.patch(
-          `/api/trips/${joinToken}/notes`,
-          { group_anything_else: value },
+        await api.post(
+          `/api/trips/${joinToken}/budget/preferences`,
+          { anything_else: value },
           joinToken
         );
+        onRefresh();
       } catch {
         // silent fail
       }
     },
-    [joinToken]
+    [joinToken, onRefresh]
   );
 
   const handleChange = (value: string) => {
