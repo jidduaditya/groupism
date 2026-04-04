@@ -299,7 +299,7 @@ const TripRoom = () => {
     return (
       <div className="min-h-screen relative z-10">
         <Header />
-        <div className="max-w-3xl mx-auto px-4 pt-24">
+        <div className="max-w-2xl mx-auto px-4 pt-24">
           <p className="font-ui text-t-secondary">Loading trip...</p>
         </div>
       </div>
@@ -311,7 +311,7 @@ const TripRoom = () => {
     return (
       <div className="min-h-screen relative z-10">
         <Header />
-        <div className="max-w-3xl mx-auto px-4 pt-24">
+        <div className="max-w-2xl mx-auto px-4 pt-24">
           <h1 className="font-display text-[32px] font-bold text-t-primary mb-2">Trip not found</h1>
           <p className="font-ui text-t-secondary">{error}</p>
         </div>
@@ -343,7 +343,7 @@ const TripRoom = () => {
   return (
     <div className="min-h-screen relative z-10">
       <Header />
-      <div className="max-w-3xl mx-auto px-4 pt-24 pb-32 space-y-4">
+      <div className="max-w-2xl mx-auto px-4 pt-24 pb-32 space-y-6">
         {/* Trip header */}
         <div className="flex flex-col md:flex-row md:items-start md:justify-between">
           <div>
@@ -389,53 +389,47 @@ const TripRoom = () => {
           members={members}
         />
 
-        {/* Row 1: Destination + Budget */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <DestinationSearchCard
-            joinToken={joinToken!}
-            trip={trip}
-            destinations={destinations}
-            currentMemberId={currentMemberId}
-            isOrganiser={isOrganiser}
-            onTripUpdated={fetchTrip}
-            onVote={handleVote}
-            onRemove={handleRemoveDestination}
-            onSelect={handleSelectDestination}
-            onDeselect={handleDeselectDestination}
-            deadline={destDeadline}
-          />
-          <BudgetCard
-            joinToken={joinToken!}
-            budgetPrefs={budgetPrefs}
-            members={members}
-            currentMemberId={currentMemberId}
-            onTripUpdated={fetchTrip}
-            deadline={budgetDeadline}
-            cachedAnalysis={budgetEstimate?.breakdown ?? null}
-            trip={trip}
-          />
-        </div>
+        <DestinationSearchCard
+          joinToken={joinToken!}
+          trip={trip}
+          destinations={destinations}
+          currentMemberId={currentMemberId}
+          isOrganiser={isOrganiser}
+          onTripUpdated={fetchTrip}
+          onVote={handleVote}
+          onRemove={handleRemoveDestination}
+          onSelect={handleSelectDestination}
+          onDeselect={handleDeselectDestination}
+          deadline={destDeadline}
+        />
+        <BudgetCard
+          joinToken={joinToken!}
+          budgetPrefs={budgetPrefs}
+          members={members}
+          currentMemberId={currentMemberId}
+          onTripUpdated={fetchTrip}
+          deadline={budgetDeadline}
+          cachedAnalysis={budgetEstimate?.breakdown ?? null}
+          trip={trip}
+        />
 
-        {/* Row 2: Calendar + What do you want to do */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <AvailabilityCalendar
-            joinToken={joinToken!}
-            trip={trip}
-            members={members}
-            availSlots={availSlots}
-            currentMemberId={currentMemberId}
-            isOrganiser={isOrganiser}
-            onTripUpdated={fetchTrip}
-            availabilityDeadline={availDeadline}
-            travelWindows={travelWindows}
-          />
-          <WhatDoYouWantToDoCard
-            joinToken={joinToken!}
-            trip={trip}
-            existingPrefs={myPrefs}
-            onRefresh={fetchTrip}
-          />
-        </div>
+        <AvailabilityCalendar
+          joinToken={joinToken!}
+          trip={trip}
+          members={members}
+          availSlots={availSlots}
+          currentMemberId={currentMemberId}
+          isOrganiser={isOrganiser}
+          onTripUpdated={fetchTrip}
+          availabilityDeadline={availDeadline}
+          travelWindows={travelWindows}
+        />
+        <WhatDoYouWantToDoCard
+          joinToken={joinToken!}
+          trip={trip}
+          existingPrefs={myPrefs}
+          onRefresh={fetchTrip}
+        />
 
         {/* Full width: Anything else */}
         <AnythingElseCard
@@ -455,7 +449,7 @@ const TripRoom = () => {
 
       {/* Sticky "I'm in" button */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--bg-base)]/90 backdrop-blur-sm border-t border-b-subtle z-20">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-2xl mx-auto">
           {!hasConfirmed ? (
             <button
               onClick={handleConfirm}
