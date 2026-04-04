@@ -213,7 +213,7 @@ export default function DestinationSearchCard({
             <button
               onClick={handleSearch}
               disabled={!searchValue.trim()}
-              className="h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+              className="h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all duration-200 cursor-pointer btn-press whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Search
             </button>
@@ -232,7 +232,7 @@ export default function DestinationSearchCard({
               />
               <button
                 onClick={handleAiSuggest}
-                className="mt-2 h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap"
+                className="mt-2 h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all duration-200 cursor-pointer btn-press whitespace-nowrap"
               >
                 Suggest →
               </button>
@@ -254,7 +254,7 @@ export default function DestinationSearchCard({
                 <button
                   key={name}
                   onClick={() => handleChipClick(name)}
-                  className="h-11 px-5 rounded-[4px] bg-surface border border-b-mid font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer"
+                  className="h-11 px-5 rounded-[4px] bg-surface border border-b-mid font-ui text-sm text-t-primary hover:bg-hover transition-all duration-200 cursor-pointer btn-press"
                 >
                   {name}
                 </button>

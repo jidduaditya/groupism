@@ -170,7 +170,7 @@ export default function WhatDoYouWantToDoCard({
               type="button"
               onClick={() => toggleCategory(act.value)}
               className={cn(
-                "rounded-[4px] px-4 py-2 font-ui text-sm transition-colors",
+                "rounded-[4px] px-4 py-2 font-ui text-sm transition-all duration-200 btn-press",
                 selected
                   ? "border border-accent-amber bg-elevated text-t-primary"
                   : "border border-b-mid bg-elevated text-t-secondary"
