@@ -113,14 +113,14 @@ export default function DestinationVoteCard({
   return (
     <div
       className={cn(
-        "bg-surface border border-b-subtle rounded-[4px] p-5 transition-opacity",
+        "bg-surface border border-b-mid rounded-[4px] p-6 transition-opacity",
         borderClass,
         isSelected ? "" : "",
       )}
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-2xl font-bold text-t-primary">
+        <h3 className="font-display text-2xl font-bold text-t-primary truncate min-w-0">
           {destination.name}
         </h3>
         <div className="flex items-center gap-2 shrink-0">
@@ -136,7 +136,8 @@ export default function DestinationVoteCard({
             <button
               onClick={() => onRemove(destination.id)}
               className="text-t-tertiary hover:text-terra transition-colors text-lg leading-none px-1"
-              title="Remove destination"
+              aria-label={`Remove ${destination.name}`}
+              title={`Remove ${destination.name}`}
             >
               ×
             </button>
@@ -183,7 +184,7 @@ export default function DestinationVoteCard({
             className={cn(
               "h-10 px-5 rounded-[4px] font-ui text-sm transition-all cursor-pointer",
               hasVoted
-                ? "bg-amber text-[#1c1a15] font-medium"
+                ? "bg-amber text-t-primary font-medium"
                 : "border border-b-mid text-t-primary hover:bg-hover"
             )}
           >
@@ -212,7 +213,7 @@ export default function DestinationVoteCard({
             onClick={onDeselect}
             className="font-ui text-xs text-t-tertiary hover:text-terra transition-colors cursor-pointer ml-auto"
           >
-            × Change selection
+            × Unlock destination
           </button>
         )}
       </div>

@@ -105,7 +105,7 @@ export default function BudgetCard({
           api.post(`/api/trips/${joinToken}/budget/analyse`, {}, joinToken).catch(() => {});
         }
       } catch {
-        toast({ title: "Failed to save budget", variant: "destructive" });
+        toast({ title: "Couldn't save your budget", description: "Check your connection and try again.", variant: "destructive" });
       }
     },
     [joinToken, onTripUpdated, budgetPrefs, currentMemberId]
@@ -176,7 +176,7 @@ export default function BudgetCard({
 
   return (
     <div className="rounded-[4px] border border-b-mid bg-surface p-6 min-h-[280px]">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 pr-8">
         <h2 className="font-display text-2xl font-bold text-t-primary">
           What&apos;s your budget for this trip?
         </h2>
@@ -241,10 +241,10 @@ export default function BudgetCard({
       {/* Average + count */}
       {avgMin !== null && avgMax !== null && (
         <div className="mt-6 border-t border-b-subtle pt-4">
-          <p className="font-mono text-xl text-text-primary">
+          <p className="font-mono text-xl text-t-primary">
             ₹{formatINR(avgMin)} – ₹{formatINR(avgMax)}
           </p>
-          <p className="font-ui text-xs text-text-tertiary mt-0.5">
+          <p className="font-ui text-xs text-t-tertiary mt-0.5">
             Based on {submitted.length}{" "}
             {submitted.length === 1 ? "person" : "people"}
           </p>

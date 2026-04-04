@@ -98,7 +98,7 @@ export default function GroupInsightsPanel({
 
   return (
     <div className="rounded-[4px] border border-b-mid bg-surface p-6">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 pr-8">
         <h2 className="font-display text-2xl font-bold text-t-primary">
           Group insights
         </h2>

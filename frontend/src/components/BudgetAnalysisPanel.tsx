@@ -79,7 +79,7 @@ export default function BudgetAnalysisPanel({
       );
       setAnalysis(res.analysis);
     } catch (err: any) {
-      setError(err.message || "Analysis unavailable");
+      setError(err.message || "Budget analysis isn't available right now.");
     } finally {
       setLoading(false);
     }
@@ -113,7 +113,7 @@ export default function BudgetAnalysisPanel({
           onClick={fetchAnalysis}
           className="font-ui text-xs text-t-tertiary hover:text-t-secondary mt-2 cursor-pointer transition-colors"
         >
-          Retry
+          Try again
         </button>
       </div>
     );
@@ -144,7 +144,7 @@ export default function BudgetAnalysisPanel({
           onClick={fetchAnalysis}
           className="font-ui text-xs text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
         >
-          Recalculate
+          Refresh analysis
         </button>
       </div>
 

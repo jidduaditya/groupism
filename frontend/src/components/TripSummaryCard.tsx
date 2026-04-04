@@ -91,7 +91,7 @@ export default function TripSummaryCard({
   if (!hasDest && !hasBudget && !hasActivities) return null;
 
   return (
-    <div className="bg-surface border border-b-mid rounded-[8px] p-6 mb-6">
+    <div className="bg-surface border border-b-mid rounded-[4px] p-6 mb-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Destination */}
         <div>
@@ -100,18 +100,18 @@ export default function TripSummaryCard({
           </p>
           {selectedDest ? (
             <>
-              <p className="font-display text-xl text-text-primary">
+              <p className="font-display text-xl text-t-primary truncate">
                 {selectedDest.name}
               </p>
               {selectedDest.nights && trip.travel_from && trip.travel_to && (
-                <p className="font-mono text-xs text-text-tertiary mt-0.5">
+                <p className="font-mono text-xs text-t-tertiary mt-0.5">
                   {selectedDest.nights}N
                 </p>
               )}
             </>
           ) : destinations.length > 0 ? (
             <>
-              <p className="font-display text-base italic text-text-secondary">
+              <p className="font-display text-base italic text-t-secondary truncate">
                 {destinations.map((d) => d.name).join(", ")}
               </p>
               <p className="font-ui text-xs text-accent-amber mt-0.5">
@@ -119,8 +119,8 @@ export default function TripSummaryCard({
               </p>
             </>
           ) : (
-            <p className="font-ui text-xs text-text-tertiary">
-              No suggestions yet
+            <p className="font-ui text-xs text-t-tertiary">
+              Suggest a place to go
             </p>
           )}
         </div>
@@ -132,17 +132,17 @@ export default function TripSummaryCard({
           </p>
           {avgMin !== null && avgMax !== null ? (
             <>
-              <p className="font-mono text-lg text-text-primary leading-tight">
+              <p className="font-mono text-lg text-t-primary leading-tight">
                 {formatBudget(avgMin)} – {formatBudget(avgMax)} avg
               </p>
-              <p className="font-ui text-xs text-text-tertiary mt-0.5">
+              <p className="font-ui text-xs text-t-tertiary mt-0.5">
                 Based on {submitted.length}{" "}
                 {submitted.length === 1 ? "person" : "people"}
               </p>
             </>
           ) : (
             <p className="font-mono text-sm text-t-tertiary">
-              No budgets yet
+              Waiting for budgets
             </p>
           )}
         </div>

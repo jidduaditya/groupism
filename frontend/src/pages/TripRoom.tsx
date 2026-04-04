@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import MemberCirclesRow from "@/components/MemberCirclesRow";
@@ -10,6 +10,8 @@ import WhatDoYouWantToDoCard from "@/components/WhatDoYouWantToDoCard";
 import AnythingElseCard from "@/components/AnythingElseCard";
 import GroupInsightsPanel from "@/components/GroupInsightsPanel";
 import TripSummaryCard from "@/components/TripSummaryCard";
+import TripProgress from "@/components/TripProgress";
+import CollapsibleSection from "@/components/CollapsibleSection";
 import { api, getTokens } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
@@ -71,6 +73,10 @@ function formatDate(d: string | null): string {
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
+function formatINR(val: number): string {
+  return val.toLocaleString("en-IN");
+}
+
 const TripRoom = () => {
   const { id: joinToken } = useParams<{ id: string }>();
   const [trip, setTrip] = useState<TripData | null>(null);
@@ -85,10 +91,19 @@ const TripRoom = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [justConfirmed, setJustConfirmed] = useState(false);
+
+  // Section expand/collapse state
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const sectionsInitRef = useRef(false);
 
   const tokens = joinToken ? getTokens(joinToken) : null;
   const isOrganiser = !!tokens?.organiserToken;
   const currentMemberId = tokens?.memberId ?? null;
+
+  const toggleSection = useCallback((key: string) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   const fetchTrip = useCallback(async () => {
     if (!joinToken) return;
@@ -115,6 +130,41 @@ const TripRoom = () => {
     fetchTrip();
   }, [fetchTrip]);
 
+  // Initialize section open states once data loads
+  useEffect(() => {
+    if (sectionsInitRef.current || loading || !trip) return;
+    sectionsInitRef.current = true;
+
+    const myBudget = budgetPrefs.find(
+      (p: any) => p.member_id === currentMemberId
+    );
+    const hasBudget = myBudget?.trip_budget_min != null;
+    const hasAvail = availSlots.some(
+      (s: any) => s.member_id === currentMemberId
+    );
+
+    const defaults: Record<string, boolean> = {};
+
+    if (destinations.length === 0 || !trip.selected_destination_id) {
+      defaults.destinations = true;
+    } else if (!hasBudget) {
+      defaults.budget = true;
+    } else if (!hasAvail) {
+      defaults.calendar = true;
+    } else {
+      defaults.preferences = true;
+    }
+
+    setOpenSections(defaults);
+  }, [
+    loading,
+    trip,
+    destinations,
+    budgetPrefs,
+    availSlots,
+    currentMemberId,
+  ]);
+
   // Stable ref to fetchTrip so Realtime callback doesn't cause re-subscriptions
   const fetchTripRef = useRef(fetchTrip);
   fetchTripRef.current = fetchTrip;
@@ -129,47 +179,92 @@ const TripRoom = () => {
       .channel(`triproom-${trip.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "destination_options", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "destination_options",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "destination_votes", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "destination_votes",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "trip_members", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "trip_members",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "trips", filter: `id=eq.${trip.id}` },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trips",
+          filter: `id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "budget_preferences", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "budget_preferences",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "availability_slots",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "budget_estimates", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "budget_estimates",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "travel_windows", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "travel_windows",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "group_insights", filter: `trip_id=eq.${trip.id}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "group_insights",
+          filter: `trip_id=eq.${trip.id}`,
+        },
         refetch
       )
       .subscribe((status) => {
@@ -189,17 +284,22 @@ const TripRoom = () => {
       if (document.visibilityState === "visible") fetchTrip();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
   }, [fetchTrip]);
 
   const handleConfirm = async () => {
     if (!joinToken) return;
     try {
       await api.post(`/api/trips/${joinToken}/confirm`, {}, joinToken);
+      setJustConfirmed(true);
       await fetchTrip();
-      toast({ title: "You're in!" });
     } catch (err: any) {
-      toast({ title: "Confirm failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Couldn't confirm you",
+        description: err.message || "Check your connection and try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -216,7 +316,6 @@ const TripRoom = () => {
   const handleVote = async (destId: string) => {
     if (!joinToken) return;
 
-    // Optimistic update
     setDestinations((prev) =>
       prev.map((d) => {
         if (d.id !== destId) return d;
@@ -227,7 +326,9 @@ const TripRoom = () => {
           return {
             ...d,
             votes: d.votes - 1,
-            voter_member_ids: d.voter_member_ids.filter((id) => id !== currentMemberId),
+            voter_member_ids: d.voter_member_ids.filter(
+              (id) => id !== currentMemberId
+            ),
           };
         }
         return {
@@ -249,18 +350,29 @@ const TripRoom = () => {
       await fetchTrip();
     } catch (err: any) {
       await fetchTrip();
-      toast({ title: "Vote failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Couldn't register your vote",
+        description: err.message || "Try again in a moment.",
+        variant: "destructive",
+      });
     }
   };
 
   const handleRemoveDestination = async (destId: string) => {
     if (!joinToken) return;
     try {
-      await api.delete(`/api/trips/${joinToken}/destinations/${destId}`, joinToken);
+      await api.delete(
+        `/api/trips/${joinToken}/destinations/${destId}`,
+        joinToken
+      );
       await fetchTrip();
-      toast({ title: "Destination removed" });
+      toast({ title: "Destination removed from the list" });
     } catch (err: any) {
-      toast({ title: "Remove failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Couldn't remove destination",
+        description: err.message || "Try again in a moment.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -273,9 +385,13 @@ const TripRoom = () => {
         joinToken
       );
       await fetchTrip();
-      toast({ title: "Destination locked in" });
+      toast({ title: "Destination locked in — the group is going here" });
     } catch (err: any) {
-      toast({ title: "Selection failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Couldn't lock in destination",
+        description: err.message || "Try again in a moment.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -288,19 +404,129 @@ const TripRoom = () => {
         joinToken
       );
       await fetchTrip();
-      toast({ title: "Selection cleared" });
+      toast({ title: "Destination selection cleared — voting is back on" });
     } catch (err: any) {
-      toast({ title: "Failed to clear", description: err.message, variant: "destructive" });
+      toast({
+        title: "Couldn't clear the selection",
+        description: err.message || "Try again in a moment.",
+        variant: "destructive",
+      });
     }
   };
+
+  // ─── Section summaries ───
+
+  const sectionSummaries = useMemo(() => {
+    const submitted = budgetPrefs.filter(
+      (p: any) => p.trip_budget_min != null && p.trip_budget_max != null
+    );
+    const avgMin =
+      submitted.length >= 1
+        ? Math.round(
+            submitted.reduce((s: number, p: any) => s + p.trip_budget_min!, 0) /
+              submitted.length /
+              500
+          ) * 500
+        : null;
+    const avgMax =
+      submitted.length >= 1
+        ? Math.round(
+            submitted.reduce((s: number, p: any) => s + p.trip_budget_max!, 0) /
+              submitted.length /
+              500
+          ) * 500
+        : null;
+
+    const availMemberCount = new Set(
+      availSlots.map((s: any) => s.member_id)
+    ).size;
+
+    const selectedDest = trip?.selected_destination_id
+      ? destinations.find((d) => d.id === trip.selected_destination_id)
+      : null;
+
+    const topDest =
+      destinations.length > 0
+        ? [...destinations].sort((a, b) => b.votes - a.votes)[0]
+        : null;
+
+    return {
+      destinations: selectedDest
+        ? `${selectedDest.name} locked in`
+        : destinations.length > 0
+        ? `${destinations.length} suggestion${destinations.length !== 1 ? "s" : ""}${topDest && topDest.votes > 0 ? `, ${topDest.name} leading` : ""}`
+        : "Add your first suggestion",
+
+      budget:
+        avgMin !== null && avgMax !== null
+          ? `${submitted.length} submitted · avg ₹${formatINR(avgMin)}–₹${formatINR(avgMax)}`
+          : submitted.length > 0
+          ? `${submitted.length} of ${members.length} submitted`
+          : "Set your budget range",
+
+      calendar:
+        availMemberCount > 0
+          ? `${availMemberCount} of ${members.length} submitted`
+          : "Mark your free dates",
+
+      preferences: (() => {
+        const cats: Record<string, number> = {};
+        for (const p of budgetPrefs) {
+          for (const cat of p.activity_categories ?? []) {
+            cats[cat] = (cats[cat] || 0) + 1;
+          }
+        }
+        const topCats = Object.keys(cats).slice(0, 3);
+        return topCats.length > 0
+          ? topCats.join(", ")
+          : "Activities & notes";
+      })(),
+
+      insights: groupInsights?.vibe_summary
+        ? groupInsights.vibe_summary.split(".")[0] + "."
+        : "AI group analysis",
+    };
+  }, [trip, destinations, budgetPrefs, availSlots, members, groupInsights]);
+
+  // Section completion (for green dot indicator on collapsed sections)
+  const sectionComplete = useMemo(() => {
+    const myBudget = budgetPrefs.find(
+      (p: any) => p.member_id === currentMemberId
+    );
+    return {
+      destinations: !!trip?.selected_destination_id,
+      budget: myBudget?.trip_budget_min != null && myBudget?.trip_budget_max != null,
+      calendar: availSlots.some((s: any) => s.member_id === currentMemberId),
+      preferences: false, // open-ended, no clear "done"
+      insights: !!groupInsights?.vibe_summary,
+    };
+  }, [trip, budgetPrefs, availSlots, currentMemberId, groupInsights]);
 
   // Loading state
   if (loading) {
     return (
       <div className="min-h-screen relative z-10">
         <Header />
-        <div className="max-w-2xl mx-auto px-4 pt-24">
-          <p className="font-ui text-t-secondary">Loading trip...</p>
+        <div className="max-w-2xl mx-auto px-4 pt-24 space-y-6">
+          <div className="space-y-3">
+            <div className="h-9 w-3/4 bg-surface rounded-[4px] overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
+            </div>
+            <div className="h-4 w-1/2 bg-surface rounded-[4px] overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="w-10 h-10 rounded-full bg-surface overflow-hidden relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
+              </div>
+            ))}
+          </div>
+          <div className="h-48 bg-surface rounded-[4px] overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
+          </div>
+          <p className="font-ui text-sm text-t-tertiary animate-pulse">Setting up your trip room...</p>
         </div>
       </div>
     );
@@ -312,7 +538,9 @@ const TripRoom = () => {
       <div className="min-h-screen relative z-10">
         <Header />
         <div className="max-w-2xl mx-auto px-4 pt-24">
-          <h1 className="font-display text-[32px] font-bold text-t-primary mb-2">Trip not found</h1>
+          <h1 className="font-display text-[32px] font-bold text-t-primary mb-2">
+            Trip not found
+          </h1>
           <p className="font-ui text-t-secondary">{error}</p>
         </div>
       </div>
@@ -323,12 +551,16 @@ const TripRoom = () => {
   const myMember = members.find((m) => m.id === currentMemberId);
   const hasConfirmed = myMember?.has_confirmed || false;
 
-  const myPrefs = budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
+  const myPrefs =
+    budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
 
   // Deadline lookups
-  const destDeadline = deadlines.find((d) => d.item_type === "destination_vote") ?? null;
-  const budgetDeadline = deadlines.find((d) => d.item_type === "budget_input") ?? null;
-  const availDeadline = deadlines.find((d) => d.item_type === "availability") ?? null;
+  const destDeadline =
+    deadlines.find((d) => d.item_type === "destination_vote") ?? null;
+  const budgetDeadline =
+    deadlines.find((d) => d.item_type === "budget_input") ?? null;
+  const availDeadline =
+    deadlines.find((d) => d.item_type === "availability") ?? null;
 
   // Header subtitle
   const headerParts: string[] = [];
@@ -336,51 +568,71 @@ const TripRoom = () => {
     headerParts.push(formatCost(trip.budget_min, trip.budget_max));
   }
   if (trip.travel_from && trip.travel_to) {
-    headerParts.push(`${formatDate(trip.travel_from)}–${formatDate(trip.travel_to)}`);
+    headerParts.push(
+      `${formatDate(trip.travel_from)}–${formatDate(trip.travel_to)}`
+    );
   }
   headerParts.push(`${members.length} people`);
+
+  // Whether insights should be visible at all
+  const showInsights = budgetPrefs.length >= 2;
 
   return (
     <div className="min-h-screen relative z-10">
       <Header />
-      <div className="max-w-2xl mx-auto px-4 pt-24 pb-32 space-y-6">
-        {/* Trip header */}
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between">
-          <div>
-            <h1 className="font-display text-[32px] md:text-[36px] font-bold leading-[1.05] text-t-primary">
-              {trip.name}
-            </h1>
-            {headerParts.length > 0 && (
-              <p className="font-mono text-[13px] text-t-secondary mt-1.5">
-                {headerParts.join("  ·  ")}
-              </p>
-            )}
+      <div className="max-w-2xl mx-auto px-4 pt-24 pb-32">
+        {/* ─── Zone 1: Trip identity (tight grouping) ─── */}
+        <div className="mb-2">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="font-display text-[32px] md:text-[36px] font-bold leading-[1.05] text-t-primary">
+                {trip.name}
+              </h1>
+              {headerParts.length > 0 && (
+                <p className="font-mono text-[13px] text-t-secondary mt-1.5">
+                  {headerParts.join("  ·  ")}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleCopyInvite}
+              className="mt-4 md:mt-0 h-9 px-4 rounded-[4px] border border-b-mid font-ui text-sm text-t-secondary hover:bg-hover transition-all"
+            >
+              {copied ? "Copied!" : "Share invite"}
+            </button>
           </div>
-          <button
-            onClick={handleCopyInvite}
-            className="mt-4 md:mt-0 h-9 px-4 rounded-[4px] border border-b-mid font-ui text-sm text-t-secondary hover:bg-hover transition-all"
-          >
-            {copied ? "Copied!" : "Share invite"}
-          </button>
         </div>
 
-        {/* Member circles */}
-        <MemberCirclesRow
-          members={members}
-          groupSize={trip.group_size || members.length}
-          currentMemberId={currentMemberId}
-        />
-
-        {/* Deadline setter — organiser only */}
-        {isOrganiser && (
-          <DeadlineSetterCollapsed
-            joinToken={joinToken!}
-            deadlines={deadlines}
-            onUpdated={fetchTrip}
+        <div className="mb-6">
+          <MemberCirclesRow
+            members={members}
+            groupSize={trip.group_size || members.length}
+            currentMemberId={currentMemberId}
           />
+        </div>
+
+        {/* ─── Zone 2: Progress + organiser controls ─── */}
+        <div className="mb-8">
+          <TripProgress
+            destinations={destinations}
+            selectedDestinationId={trip.selected_destination_id}
+            budgetPrefs={budgetPrefs}
+            availSlots={availSlots}
+            members={members}
+          />
+        </div>
+
+        {isOrganiser && (
+          <div className="mb-6">
+            <DeadlineSetterCollapsed
+              joinToken={joinToken!}
+              deadlines={deadlines}
+              onUpdated={fetchTrip}
+            />
+          </div>
         )}
 
-        {/* Summary card */}
+        {/* ─── Zone 3: Summary (always visible, compact) ─── */}
         <TripSummaryCard
           trip={trip}
           destinations={destinations}
@@ -389,62 +641,112 @@ const TripRoom = () => {
           members={members}
         />
 
-        <DestinationSearchCard
-          joinToken={joinToken!}
-          trip={trip}
-          destinations={destinations}
-          currentMemberId={currentMemberId}
-          isOrganiser={isOrganiser}
-          onTripUpdated={fetchTrip}
-          onVote={handleVote}
-          onRemove={handleRemoveDestination}
-          onSelect={handleSelectDestination}
-          onDeselect={handleDeselectDestination}
-          deadline={destDeadline}
-        />
-        <BudgetCard
-          joinToken={joinToken!}
-          budgetPrefs={budgetPrefs}
-          members={members}
-          currentMemberId={currentMemberId}
-          onTripUpdated={fetchTrip}
-          deadline={budgetDeadline}
-          cachedAnalysis={budgetEstimate?.breakdown ?? null}
-          trip={trip}
-        />
+        {/* ─── Zone 4: Planning sections (collapsible, varied spacing) ─── */}
+        <div className="space-y-3">
+          {/* Destinations */}
+          <CollapsibleSection
+            title="Where are you going?"
+            summary={sectionSummaries.destinations}
+            isOpen={!!openSections.destinations}
+            onToggle={() => toggleSection("destinations")}
+            complete={sectionComplete.destinations}
+          >
+            <DestinationSearchCard
+              joinToken={joinToken!}
+              trip={trip}
+              destinations={destinations}
+              currentMemberId={currentMemberId}
+              isOrganiser={isOrganiser}
+              onTripUpdated={fetchTrip}
+              onVote={handleVote}
+              onRemove={handleRemoveDestination}
+              onSelect={handleSelectDestination}
+              onDeselect={handleDeselectDestination}
+              deadline={destDeadline}
+            />
+          </CollapsibleSection>
 
-        <AvailabilityCalendar
-          joinToken={joinToken!}
-          trip={trip}
-          members={members}
-          availSlots={availSlots}
-          currentMemberId={currentMemberId}
-          isOrganiser={isOrganiser}
-          onTripUpdated={fetchTrip}
-          availabilityDeadline={availDeadline}
-          travelWindows={travelWindows}
-        />
-        <WhatDoYouWantToDoCard
-          joinToken={joinToken!}
-          trip={trip}
-          existingPrefs={myPrefs}
-          onRefresh={fetchTrip}
-        />
+          {/* Budget */}
+          <CollapsibleSection
+            title="What's your budget?"
+            summary={sectionSummaries.budget}
+            isOpen={!!openSections.budget}
+            onToggle={() => toggleSection("budget")}
+            complete={sectionComplete.budget}
+          >
+            <BudgetCard
+              joinToken={joinToken!}
+              budgetPrefs={budgetPrefs}
+              members={members}
+              currentMemberId={currentMemberId}
+              onTripUpdated={fetchTrip}
+              deadline={budgetDeadline}
+              cachedAnalysis={budgetEstimate?.breakdown ?? null}
+              trip={trip}
+            />
+          </CollapsibleSection>
 
-        {/* Full width: Anything else */}
-        <AnythingElseCard
-          joinToken={joinToken!}
-          trip={trip}
-          onRefresh={fetchTrip}
-        />
+          {/* Calendar */}
+          <CollapsibleSection
+            title="When can everyone go?"
+            summary={sectionSummaries.calendar}
+            isOpen={!!openSections.calendar}
+            onToggle={() => toggleSection("calendar")}
+            complete={sectionComplete.calendar}
+          >
+            <AvailabilityCalendar
+              joinToken={joinToken!}
+              trip={trip}
+              members={members}
+              availSlots={availSlots}
+              currentMemberId={currentMemberId}
+              isOrganiser={isOrganiser}
+              onTripUpdated={fetchTrip}
+              availabilityDeadline={availDeadline}
+              travelWindows={travelWindows}
+            />
+          </CollapsibleSection>
 
-        {/* Group Insights */}
-        <GroupInsightsPanel
-          joinToken={joinToken!}
-          groupInsights={groupInsights}
-          prefsCount={budgetPrefs.length}
-          onRefresh={fetchTrip}
-        />
+          {/* Preferences (grouped: activities + notes) */}
+          <CollapsibleSection
+            title="Preferences"
+            summary={sectionSummaries.preferences}
+            isOpen={!!openSections.preferences}
+            onToggle={() => toggleSection("preferences")}
+          >
+            <div className="space-y-3">
+              <WhatDoYouWantToDoCard
+                joinToken={joinToken!}
+                trip={trip}
+                existingPrefs={myPrefs}
+                onRefresh={fetchTrip}
+              />
+              <AnythingElseCard
+                joinToken={joinToken!}
+                trip={trip}
+                onRefresh={fetchTrip}
+              />
+            </div>
+          </CollapsibleSection>
+
+          {/* Group Insights */}
+          {showInsights && (
+            <CollapsibleSection
+              title="Group insights"
+              summary={sectionSummaries.insights}
+              isOpen={!!openSections.insights}
+              onToggle={() => toggleSection("insights")}
+              complete={sectionComplete.insights}
+            >
+              <GroupInsightsPanel
+                joinToken={joinToken!}
+                groupInsights={groupInsights}
+                prefsCount={budgetPrefs.length}
+                onRefresh={fetchTrip}
+              />
+            </CollapsibleSection>
+          )}
+        </div>
       </div>
 
       {/* Sticky "I'm in" button */}
@@ -453,14 +755,35 @@ const TripRoom = () => {
           {!hasConfirmed ? (
             <button
               onClick={handleConfirm}
-              className="w-full h-16 bg-amber text-[#1c1a15] font-display font-bold text-2xl rounded-[4px] tracking-tight hover:bg-amber-light active:scale-[0.98] transition-transform"
+              className="w-full h-16 bg-amber text-t-primary font-display font-bold text-2xl rounded-[4px] tracking-tight hover:bg-amber-light active:scale-[0.98] transition-transform"
             >
               I'm in
             </button>
           ) : (
-            <div className="w-full h-16 flex items-center justify-center gap-3 border border-green rounded-[4px]">
-              <span className="text-green font-mono text-lg">✓</span>
-              <span className="font-display text-xl text-green">You're in</span>
+            <div
+              className={`w-full h-16 flex items-center justify-center gap-3 border border-green rounded-[4px] ${
+                justConfirmed ? "animate-confirm-celebrate" : ""
+              }`}
+            >
+              <svg
+                className={`text-green ${justConfirmed ? "animate-check-draw" : ""}`}
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path
+                  d="M5 12l5 5L19 7"
+                  className={justConfirmed ? "check-path" : ""}
+                />
+              </svg>
+              <span className="font-display text-xl text-green">
+                You're in
+              </span>
             </div>
           )}
         </div>

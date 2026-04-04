@@ -87,7 +87,7 @@
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
     opacity: 0.025;
     pointer-events: none;
-    z-index: 9999;
+    z-index: 1;
   }
 }
 
@@ -164,6 +164,42 @@
 
 .animate-shake {
   animation: shake 0.4s ease-out;
+}
+
+/* "I'm in" → "You're in" celebration */
+@keyframes confirmCelebrate {
+  0% { transform: scale(0.92); opacity: 0; border-color: var(--accent-amber); background-color: rgba(184, 122, 8, 0.08); }
+  40% { transform: scale(1.03); opacity: 1; border-color: var(--accent-green); background-color: rgba(46, 107, 74, 0.06); }
+  100% { transform: scale(1); opacity: 1; border-color: var(--accent-green); background-color: transparent; }
+}
+
+.animate-confirm-celebrate {
+  animation: confirmCelebrate 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+/* Checkmark draw animation */
+.check-path {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 28;
+  animation: checkDraw 0.4s cubic-bezier(0.25, 1, 0.5, 1) 0.15s forwards;
+}
+
+@keyframes checkDraw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Reduced motion: disable non-essential animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer,
+  .animate-vote-scale,
+  .animate-shake,
+  .animate-confirm-celebrate {
+    animation: none !important;
+  }
+  .check-path {
+    stroke-dashoffset: 0 !important;
+    animation: none !important;
+  }
 }
 
 /* Native date input styling */

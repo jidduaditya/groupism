@@ -86,7 +86,7 @@ export default function DestinationSearchCard({
     const query = searchValue.trim();
     if (!query) return;
 
-    setAddState({ mode: "loading", loadingText: "Searching..." });
+    setAddState({ mode: "loading", loadingText: `Looking up ${query}...` });
 
     try {
       const res = await api.post(
@@ -96,7 +96,7 @@ export default function DestinationSearchCard({
       );
       const summary = res.destination ?? res;
       if (summary.already_existed) {
-        toast({ title: "Already in the list" });
+        toast({ title: `${query} is already on the list — vote for it instead` });
         setAddState({ mode: "idle" });
         setSearchValue("");
         onTripUpdated();
@@ -106,13 +106,13 @@ export default function DestinationSearchCard({
     } catch {
       setAddState({
         mode: "error",
-        message: "AI is unavailable right now. Try again later.",
+        message: "Suggestions aren't available right now. Try again in a moment.",
       });
     }
   }
 
   async function handleAiSuggest() {
-    setAddState({ mode: "loading", loadingText: "Thinking about your group..." });
+    setAddState({ mode: "loading", loadingText: "Finding destinations that fit your group..." });
 
     try {
       const res = await api.post(
@@ -136,13 +136,13 @@ export default function DestinationSearchCard({
     } catch {
       setAddState({
         mode: "error",
-        message: "AI is unavailable right now. Try again later.",
+        message: "Suggestions aren't available right now. Try again in a moment.",
       });
     }
   }
 
   async function handleChipClick(chipName: string) {
-    setAddState({ mode: "loading", loadingText: "Searching..." });
+    setAddState({ mode: "loading", loadingText: `Looking up ${chipName}...` });
 
     try {
       const res = await api.post(
@@ -152,7 +152,7 @@ export default function DestinationSearchCard({
       );
       const summary = res.destination ?? res;
       if (summary.already_existed) {
-        toast({ title: "Already in the list" });
+        toast({ title: `${chipName} is already on the list — vote for it instead` });
         setAddState({ mode: "idle" });
         onTripUpdated();
       } else {
@@ -161,7 +161,7 @@ export default function DestinationSearchCard({
     } catch {
       setAddState({
         mode: "error",
-        message: "AI is unavailable right now. Try again later.",
+        message: "Suggestions aren't available right now. Try again in a moment.",
       });
     }
   }
@@ -172,7 +172,7 @@ export default function DestinationSearchCard({
     setSearchValue("");
     setAiPromptValue("");
     onTripUpdated();
-    toast({ title: "Added to group list" });
+    toast({ title: "Added — your group can now vote on it" });
   }
 
   function handleReset() {
@@ -181,10 +181,13 @@ export default function DestinationSearchCard({
   }
 
   return (
-    <div className="bg-surface border border-b-subtle rounded-[4px] p-6">
-      <h2 className="font-display text-2xl font-bold text-t-primary mb-6">
+    <div className="bg-surface border border-b-mid rounded-[4px] p-6">
+      <h2 className="font-display text-2xl font-bold text-t-primary mb-1">
         Where are you going?
       </h2>
+      <p className="font-ui font-light text-sm text-t-secondary mb-5">
+        Search or let AI suggest destinations for the group.
+      </p>
 
       {/* ─── Section A: Add a suggestion ─── */}
       <div className="mb-6">
@@ -294,7 +297,7 @@ export default function DestinationSearchCard({
             <button
               onClick={handleAddedToList}
               className={cn(
-                "w-full h-12 bg-amber text-[#1c1a15] font-display font-bold text-base rounded-[4px] cursor-pointer hover:opacity-90 transition-opacity"
+                "w-full h-12 bg-amber text-t-primary font-display font-bold text-base rounded-[4px] cursor-pointer hover:opacity-90 transition-opacity"
               )}
             >
               Add {addState.summary.name || "destination"} to group list →

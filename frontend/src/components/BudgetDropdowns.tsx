@@ -78,7 +78,8 @@ export default function BudgetDropdowns({
         onTripUpdated();
       } catch {
         toast({
-          title: "Failed to save budget",
+          title: "Couldn't save your budget",
+          description: "Check your connection and try again.",
           variant: "destructive",
         });
       }
@@ -111,7 +112,7 @@ export default function BudgetDropdowns({
         );
         onTripUpdated();
       } catch {
-        toast({ title: "Failed to save dates", variant: "destructive" });
+        toast({ title: "Couldn't save dates", description: "Check your connection and try again.", variant: "destructive" });
       }
     },
     [isOrganiser, joinToken, onTripUpdated]

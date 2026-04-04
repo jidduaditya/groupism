@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
@@ -32,14 +32,23 @@ interface AvailabilityCalendarProps {
 }
 
 type Tier = "free" | "could_work" | "unavailable";
-
-const TIER_CYCLE: Array<Tier | null> = ["free", "could_work", "unavailable", null];
+type PickableTier = Tier | "clear";
 
 const DAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const FULL_MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const MEMBER_COLOURS = [
@@ -53,6 +62,27 @@ const MEMBER_COLOURS = [
   { bg: "rgba(34, 197, 94, 0.25)", border: "#22C55E", label: "Lime" },
 ];
 
+const TIER_LABELS: Record<PickableTier, string> = {
+  free: "Free",
+  could_work: "Could work",
+  unavailable: "Unavailable",
+  clear: "Clear",
+};
+
+const TIER_COLORS: Record<PickableTier, string> = {
+  free: "text-accent-green border-accent-green bg-accent-green/10",
+  could_work: "text-accent-amber border-accent-amber bg-accent-amber/10",
+  unavailable: "text-accent-terra border-accent-terra bg-accent-terra/10",
+  clear: "text-t-secondary border-b-mid bg-transparent",
+};
+
+const TIER_INACTIVE: Record<PickableTier, string> = {
+  free: "text-t-secondary border-b-mid hover:border-accent-green/40",
+  could_work: "text-t-secondary border-b-mid hover:border-accent-amber/40",
+  unavailable: "text-t-secondary border-b-mid hover:border-accent-terra/40",
+  clear: "text-t-tertiary border-b-subtle hover:border-b-mid",
+};
+
 function dateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -62,9 +92,22 @@ function getDaysInMonth(year: number, month: number): number {
 }
 
 function getFirstDayOfWeek(year: number, month: number): number {
-  // 0=Sun, convert so Mon=0
   const day = new Date(year, month, 1).getDay();
   return day === 0 ? 6 : day - 1;
+}
+
+function getDateRange(startKey: string, endKey: string): string[] {
+  const dates: string[] = [];
+  const startDate = new Date(startKey + "T00:00:00");
+  const endDate = new Date(endKey + "T00:00:00");
+  const [from, to] =
+    startDate <= endDate ? [startDate, endDate] : [endDate, startDate];
+  const current = new Date(from);
+  while (current <= to) {
+    dates.push(dateKey(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
 }
 
 interface OverlapWindow {
@@ -78,15 +121,12 @@ interface OverlapWindow {
 function computeOverlapWindows(
   availSlots: Array<{ member_id: string; slot_date: string; tier: string }>
 ): OverlapWindow[] {
-  // Count submitted members
   const submittedIds = new Set<string>();
   for (const slot of availSlots) submittedIds.add(slot.member_id);
   const submittedCount = submittedIds.size;
   if (submittedCount === 0) return [];
 
   const threshold = Math.max(2, Math.ceil(submittedCount * 0.5));
-
-  // Build map: date -> count of members with free or could_work
   const dateAvailCount = new Map<string, number>();
   const dateMemberSeen = new Map<string, Set<string>>();
 
@@ -105,7 +145,6 @@ function computeOverlapWindows(
     }
   }
 
-  // Get qualifying dates sorted
   const qualifyingDates = Array.from(dateAvailCount.entries())
     .filter(([, count]) => count >= threshold)
     .map(([date, count]) => ({ date, count }))
@@ -113,7 +152,6 @@ function computeOverlapWindows(
 
   if (qualifyingDates.length === 0) return [];
 
-  // Group into consecutive windows
   const windows: OverlapWindow[] = [];
   let windowStart = qualifyingDates[0];
   let windowEnd = qualifyingDates[0];
@@ -122,8 +160,7 @@ function computeOverlapWindows(
   for (let i = 1; i < qualifyingDates.length; i++) {
     const prev = new Date(qualifyingDates[i - 1].date + "T00:00:00");
     const curr = new Date(qualifyingDates[i].date + "T00:00:00");
-    const diffDays =
-      (curr.getTime() - prev.getTime()) / 86400000;
+    const diffDays = (curr.getTime() - prev.getTime()) / 86400000;
 
     if (diffDays === 1) {
       windowEnd = qualifyingDates[i];
@@ -150,7 +187,6 @@ function computeOverlapWindows(
     }
   }
 
-  // Final window
   const days =
     Math.round(
       (new Date(windowEnd.date + "T00:00:00").getTime() -
@@ -167,7 +203,6 @@ function computeOverlapWindows(
     });
   }
 
-  // Sort: most members first, then longest
   windows.sort(
     (a, b) => b.memberCount - a.memberCount || b.days - a.days
   );
@@ -201,6 +236,11 @@ export default function AvailabilityCalendar({
     trip.deadline ?? ""
   );
 
+  // New interaction model: tier picker + range selection
+  const [selectedTier, setSelectedTier] = useState<PickableTier>("free");
+  const [rangeMode, setRangeMode] = useState(false);
+  const [rangeStart, setRangeStart] = useState<string | null>(null);
+
   // Month navigation
   const [currentMonth, setCurrentMonth] = useState(() => {
     const anchor = trip.travel_from
@@ -209,7 +249,6 @@ export default function AvailabilityCalendar({
     return new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   });
 
-  // Re-anchor when travel_from changes
   useEffect(() => {
     if (trip.travel_from) {
       const d = new Date(trip.travel_from + "T00:00:00");
@@ -217,23 +256,26 @@ export default function AvailabilityCalendar({
     }
   }, [trip.travel_from]);
 
-  // Keep local slots in sync
   useEffect(() => {
     setLocalSlots(availSlots);
   }, [availSlots]);
 
-  // Member colour map (deterministic by member order)
   const memberColourMap = useMemo(
     () =>
       new Map(
-        members.map((m, i) => [m.id, MEMBER_COLOURS[i % MEMBER_COLOURS.length]])
+        members.map((m, i) => [
+          m.id,
+          MEMBER_COLOURS[i % MEMBER_COLOURS.length],
+        ])
       ),
     [members]
   );
 
-  // Build lookup: date string -> array of { member_id, tier }
   const slotsByDate = useMemo(() => {
-    const map = new Map<string, Array<{ member_id: string; tier: string }>>();
+    const map = new Map<
+      string,
+      Array<{ member_id: string; tier: string }>
+    >();
     for (const slot of localSlots) {
       const key = slot.slot_date;
       if (!map.has(key)) map.set(key, []);
@@ -242,7 +284,6 @@ export default function AvailabilityCalendar({
     return map;
   }, [localSlots]);
 
-  // Submitted member IDs
   const submittedMemberIds = useMemo(() => {
     const ids = new Set<string>();
     for (const slot of localSlots) ids.add(slot.member_id);
@@ -257,7 +298,6 @@ export default function AvailabilityCalendar({
     return d;
   }, []);
 
-  // Build calendar days for current month
   const calendarCells = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -265,79 +305,115 @@ export default function AvailabilityCalendar({
     const firstDow = getFirstDayOfWeek(year, month);
 
     const cells: Array<{ date: Date; inMonth: boolean } | null> = [];
-
-    // Leading empties
     for (let i = 0; i < firstDow; i++) cells.push(null);
-
-    // Days in month
     for (let d = 1; d <= daysInMonth; d++) {
       cells.push({ date: new Date(year, month, d), inMonth: true });
     }
-
-    // Trailing empties to fill last row
     while (cells.length % 7 !== 0) cells.push(null);
 
     return cells;
   }, [currentMonth]);
 
-  const handleCellTap = useCallback(
-    async (date: Date) => {
-      if (!currentMemberId) return;
+  // Ref for pending API calls
+  const pendingRef = useRef(false);
 
-      const key = dateKey(date);
-      const existing = localSlots.find(
-        (s) => s.member_id === currentMemberId && s.slot_date === key
-      );
+  // Apply tier to a list of date keys
+  const applyTierToDates = useCallback(
+    async (dateKeys: string[], tier: PickableTier) => {
+      if (!currentMemberId || pendingRef.current) return;
+      pendingRef.current = true;
 
-      const currentTier: Tier | null = existing
-        ? (existing.tier as Tier)
-        : null;
-      const currentIndex = TIER_CYCLE.indexOf(currentTier);
-      const nextTier = TIER_CYCLE[(currentIndex + 1) % TIER_CYCLE.length];
-
+      const apiTier: string | null = tier === "clear" ? null : tier;
       const previousSlots = [...localSlots];
 
-      if (nextTier === null) {
-        setLocalSlots((prev) =>
-          prev.filter(
-            (s) => !(s.member_id === currentMemberId && s.slot_date === key)
-          )
-        );
-      } else if (existing) {
-        setLocalSlots((prev) =>
-          prev.map((s) =>
-            s.member_id === currentMemberId && s.slot_date === key
-              ? { ...s, tier: nextTier }
-              : s
-          )
-        );
-      } else {
-        setLocalSlots((prev) => [
-          ...prev,
-          { member_id: currentMemberId, slot_date: key, tier: nextTier },
-        ]);
-      }
+      // Optimistic update
+      setLocalSlots((prev) => {
+        let slots = [...prev];
+        for (const dk of dateKeys) {
+          if (apiTier === null) {
+            slots = slots.filter(
+              (s) =>
+                !(s.member_id === currentMemberId && s.slot_date === dk)
+            );
+          } else {
+            const idx = slots.findIndex(
+              (s) => s.member_id === currentMemberId && s.slot_date === dk
+            );
+            if (idx >= 0) {
+              slots[idx] = { ...slots[idx], tier: apiTier };
+            } else {
+              slots.push({
+                member_id: currentMemberId,
+                slot_date: dk,
+                tier: apiTier,
+              });
+            }
+          }
+        }
+        return slots;
+      });
 
       try {
-        await api.post(
-          `/api/trips/${joinToken}/availability`,
-          { slot: { date: key, tier: nextTier } },
-          joinToken
+        await Promise.all(
+          dateKeys.map((dk) =>
+            api.post(
+              `/api/trips/${joinToken}/availability`,
+              { slot: { date: dk, tier: apiTier } },
+              joinToken
+            )
+          )
         );
 
-        // Auto-trigger AI travel windows when ≥2 members submitted (organiser only)
         if (isOrganiser && submittedMemberIds.size >= 2) {
-          api.post(`/api/trips/${joinToken}/availability/windows`, {}, joinToken).catch(() => {});
+          api
+            .post(
+              `/api/trips/${joinToken}/availability/windows`,
+              {},
+              joinToken
+            )
+            .catch(() => {});
         }
       } catch {
         setLocalSlots(previousSlots);
         toast({
-          title: "Failed to update availability",
+          title: "Couldn't save your dates — try again",
           variant: "destructive",
         });
+      } finally {
+        pendingRef.current = false;
       }
     },
-    [currentMemberId, localSlots, joinToken, isOrganiser, submittedMemberIds]
+    [
+      currentMemberId,
+      localSlots,
+      joinToken,
+      isOrganiser,
+      submittedMemberIds,
+    ]
+  );
+
+  const handleCellTap = useCallback(
+    (date: Date) => {
+      if (!currentMemberId) return;
+      const key = dateKey(date);
+
+      if (rangeMode && rangeStart) {
+        // Second tap: apply range
+        const range = getDateRange(rangeStart, key);
+        applyTierToDates(range, selectedTier);
+        setRangeStart(null);
+        setRangeMode(false);
+      } else if (rangeMode) {
+        // First tap in range mode: set start
+        setRangeStart(key);
+        // Also apply tier to start date immediately
+        applyTierToDates([key], selectedTier);
+      } else {
+        // Single tap mode: apply tier to one date
+        applyTierToDates([key], selectedTier);
+      }
+    },
+    [currentMemberId, rangeMode, rangeStart, selectedTier, applyTierToDates]
   );
 
   const handleDeadlineChange = useCallback(
@@ -353,13 +429,15 @@ export default function AvailabilityCalendar({
         onTripUpdated();
       } catch {
         setDeadlineValue(trip.deadline ?? "");
-        toast({ title: "Failed to update deadline", variant: "destructive" });
+        toast({
+          title: "Couldn't save the deadline",
+          variant: "destructive",
+        });
       }
     },
     [joinToken, onTripUpdated, trip.deadline]
   );
 
-  // Navigation
   const prevMonth = () =>
     setCurrentMonth(
       (m) => new Date(m.getFullYear(), m.getMonth() - 1, 1)
@@ -369,12 +447,17 @@ export default function AvailabilityCalendar({
       (m) => new Date(m.getFullYear(), m.getMonth() + 1, 1)
     );
 
-  // Overlap windows
   const overlapWindows = useMemo(
     () => computeOverlapWindows(localSlots),
     [localSlots]
   );
   const topWindow = overlapWindows.length > 0 ? overlapWindows[0] : null;
+
+  // Compute in-range dates for visual preview
+  const rangePreviewSet = useMemo(() => {
+    if (!rangeStart || !rangeMode) return new Set<string>();
+    return new Set([rangeStart]);
+  }, [rangeStart, rangeMode]);
 
   function renderStrips(date: Date) {
     const key = dateKey(date);
@@ -389,7 +472,11 @@ export default function AvailabilityCalendar({
 
           const isCurrentUser = entry.member_id === currentMemberId;
           const opacity =
-            entry.tier === "free" ? 1 : entry.tier === "could_work" ? 0.6 : 1;
+            entry.tier === "free"
+              ? 1
+              : entry.tier === "could_work"
+              ? 0.6
+              : 1;
 
           return (
             <div
@@ -412,37 +499,101 @@ export default function AvailabilityCalendar({
     );
   }
 
+  // Get tier indicator color for a cell (current user's tier on that date)
+  function getCellTierIndicator(key: string): string | null {
+    if (!currentMemberId) return null;
+    const entry = localSlots.find(
+      (s) => s.member_id === currentMemberId && s.slot_date === key
+    );
+    if (!entry) return null;
+    if (entry.tier === "free") return "ring-accent-green/50";
+    if (entry.tier === "could_work") return "ring-accent-amber/50";
+    if (entry.tier === "unavailable") return "ring-accent-terra/50";
+    return null;
+  }
+
   return (
     <div className="bg-surface border border-b-subtle rounded-[4px] p-6">
-      <h2 className="font-display text-2xl font-bold text-t-primary mb-1">
+      <h2 className="font-display text-2xl font-bold text-t-primary mb-1 pr-8">
         When can everyone go?
       </h2>
 
-      {/* Tap instruction */}
-      <p className="font-ui text-xs text-t-tertiary mb-4">
-        Tap to cycle:{" "}
-        <span className="text-green">free</span>
-        {" / "}
-        <span className="text-amber">could work</span>
-        {" / "}
-        <span className="text-terra">unavailable</span>
-        {" / "}
-        <span>clear</span>
-      </p>
+      {/* ─── Tier Picker ─── */}
+      <div className="mb-4">
+        <p className="font-ui text-xs text-t-tertiary mb-2">
+          Select a status, then tap dates to mark them
+        </p>
+        <div className="flex flex-wrap gap-2 items-center">
+          {(["free", "could_work", "unavailable", "clear"] as PickableTier[]).map(
+            (tier) => (
+              <button
+                key={tier}
+                type="button"
+                onClick={() => {
+                  setSelectedTier(tier);
+                  // Exit range mode if switching tier
+                  if (rangeStart) {
+                    setRangeStart(null);
+                    setRangeMode(false);
+                  }
+                }}
+                className={cn(
+                  "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
+                  selectedTier === tier
+                    ? TIER_COLORS[tier]
+                    : TIER_INACTIVE[tier]
+                )}
+              >
+                {TIER_LABELS[tier]}
+              </button>
+            )
+          )}
+
+          <div className="w-px h-6 bg-[var(--border-subtle)] mx-1" />
+
+          {/* Range select toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              if (rangeMode) {
+                setRangeMode(false);
+                setRangeStart(null);
+              } else {
+                setRangeMode(true);
+              }
+            }}
+            className={cn(
+              "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
+              rangeMode
+                ? "border-accent-amber bg-accent-amber/10 text-accent-amber"
+                : "border-b-mid text-t-secondary hover:border-b-strong"
+            )}
+          >
+            {rangeMode
+              ? rangeStart
+                ? "Tap end date"
+                : "Tap start date"
+              : "Range select"}
+          </button>
+        </div>
+      </div>
 
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={prevMonth}
+          aria-label="Previous month"
           className="h-9 w-9 flex items-center justify-center rounded-[4px] border border-b-mid text-t-secondary hover:bg-hover transition-colors cursor-pointer"
         >
           ←
         </button>
         <span className="font-display text-xl text-t-primary">
-          {FULL_MONTH_NAMES[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+          {FULL_MONTH_NAMES[currentMonth.getMonth()]}{" "}
+          {currentMonth.getFullYear()}
         </span>
         <button
           onClick={nextMonth}
+          aria-label="Next month"
           className="h-9 w-9 flex items-center justify-center rounded-[4px] border border-b-mid text-t-secondary hover:bg-hover transition-colors cursor-pointer"
         >
           →
@@ -465,7 +616,12 @@ export default function AvailabilityCalendar({
       <div className="grid grid-cols-7">
         {calendarCells.map((cell, i) => {
           if (!cell) {
-            return <div key={`empty-${i}`} className="min-h-[52px] sm:min-h-[52px]" />;
+            return (
+              <div
+                key={`empty-${i}`}
+                className="min-h-[52px] sm:min-h-[52px]"
+              />
+            );
           }
 
           const { date } = cell;
@@ -474,11 +630,8 @@ export default function AvailabilityCalendar({
           const isInTopWindow = topWindow
             ? key >= topWindow.start && key <= topWindow.end
             : false;
-          const myEntry = currentMemberId
-            ? localSlots.find(
-                (s) => s.member_id === currentMemberId && s.slot_date === key
-              )
-            : null;
+          const tierRing = getCellTierIndicator(key);
+          const isRangeStart = rangePreviewSet.has(key);
 
           return (
             <button
@@ -490,12 +643,14 @@ export default function AvailabilityCalendar({
               }}
               className={cn(
                 "min-h-[44px] sm:min-h-[52px] p-1 border border-b-subtle/50 flex flex-col items-start",
-                "transition-colors rounded-[4px]",
+                "transition-all rounded-[4px]",
                 isInTopWindow && "bg-[rgba(58,125,92,0.08)]",
-                myEntry && "ring-1 ring-inset ring-amber/40",
+                tierRing && `ring-1 ring-inset ${tierRing}`,
+                isRangeStart &&
+                  "ring-2 ring-inset ring-accent-amber shadow-sm",
                 isPast
                   ? "opacity-30 cursor-not-allowed"
-                  : "cursor-pointer hover:bg-hover"
+                  : "cursor-pointer hover:bg-hover active:scale-[0.96]"
               )}
             >
               <span className="font-mono text-xs text-t-primary leading-tight">
@@ -511,7 +666,7 @@ export default function AvailabilityCalendar({
       <div className="mt-4 pt-4 border-t border-b-subtle">
         {submittedCount === 0 ? (
           <p className="font-ui text-sm text-t-tertiary">
-            Add your availability above to see when the group can go.
+            Mark your free dates above to see when the group can go.
           </p>
         ) : overlapWindows.length === 0 ? (
           <p className="font-ui text-sm text-t-tertiary">
@@ -532,7 +687,9 @@ export default function AvailabilityCalendar({
               >
                 <span>
                   {formatShortDate(w.start)} – {formatShortDate(w.end)}{" "}
-                  <span className="text-xs opacity-70">({w.days} days)</span>
+                  <span className="text-xs opacity-70">
+                    ({w.days} days)
+                  </span>
                 </span>
                 <span className="text-xs">
                   {w.memberCount} of {w.totalMembers} can make it
@@ -560,25 +717,30 @@ export default function AvailabilityCalendar({
               >
                 <div className="flex items-baseline justify-between">
                   <span className="font-mono text-sm text-t-primary">
-                    {formatShortDate(w.start_date)} – {formatShortDate(w.end_date)}
+                    {formatShortDate(w.start_date)} –{" "}
+                    {formatShortDate(w.end_date)}
                   </span>
                   <span className="font-ui text-xs text-t-tertiary">
                     {w.nights} night{w.nights !== 1 ? "s" : ""}
                   </span>
                 </div>
                 {w.summary && (
-                  <p className="font-ui text-xs text-t-secondary mt-1">{w.summary}</p>
-                )}
-                {w.stretching_members && w.stretching_members.length > 0 && (
-                  <p className="font-ui text-xs text-amber mt-1">
-                    Stretching: {w.stretching_members.join(", ")}
+                  <p className="font-ui text-xs text-t-secondary mt-1">
+                    {w.summary}
                   </p>
                 )}
-                {w.unavailable_members && w.unavailable_members.length > 0 && (
-                  <p className="font-ui text-xs text-terra mt-1">
-                    Unavailable: {w.unavailable_members.join(", ")}
-                  </p>
-                )}
+                {w.stretching_members &&
+                  w.stretching_members.length > 0 && (
+                    <p className="font-ui text-xs text-amber mt-1">
+                      Stretching: {w.stretching_members.join(", ")}
+                    </p>
+                  )}
+                {w.unavailable_members &&
+                  w.unavailable_members.length > 0 && (
+                    <p className="font-ui text-xs text-terra mt-1">
+                      Unavailable: {w.unavailable_members.join(", ")}
+                    </p>
+                  )}
               </div>
             ))}
           </div>
@@ -586,9 +748,19 @@ export default function AvailabilityCalendar({
             <button
               type="button"
               onClick={() => {
-                api.post(`/api/trips/${joinToken}/availability/windows`, {}, joinToken)
+                api
+                  .post(
+                    `/api/trips/${joinToken}/availability/windows`,
+                    {},
+                    joinToken
+                  )
                   .then(() => onTripUpdated())
-                  .catch(() => toast({ title: "Failed to refresh windows", variant: "destructive" }));
+                  .catch(() =>
+                    toast({
+                      title: "Couldn't refresh best travel dates",
+                      variant: "destructive",
+                    })
+                  );
               }}
               className="font-ui text-xs text-t-tertiary hover:text-t-secondary mt-3 cursor-pointer transition-colors"
             >
@@ -610,7 +782,7 @@ export default function AvailabilityCalendar({
                   className="w-3 h-3 rounded-[2px]"
                   style={{ backgroundColor: colour.border }}
                 />
-                <span className="font-ui text-xs text-t-secondary">
+                <span className="font-ui text-xs text-t-secondary truncate max-w-[100px]">
                   {m.display_name}
                 </span>
               </div>
@@ -618,15 +790,22 @@ export default function AvailabilityCalendar({
           })}
         </div>
         <div className="flex gap-4">
-          <span className="font-ui text-xs text-t-tertiary">
-            ██ Free
-          </span>
-          <span className="font-ui text-xs text-t-tertiary">
-            ▒▒ Could work
-          </span>
-          <span className="font-ui text-xs text-t-tertiary">
-            ╳╳ Unavailable
-          </span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-1 rounded-[1px] bg-t-secondary" />
+            <span className="font-ui text-xs text-t-tertiary">Free</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-1 rounded-[1px] bg-t-secondary opacity-50" />
+            <span className="font-ui text-xs text-t-tertiary">
+              Could work
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-1 rounded-[1px] bg-[repeating-linear-gradient(135deg,transparent,transparent_1px,var(--text-secondary)_1px,var(--text-secondary)_2px)]" />
+            <span className="font-ui text-xs text-t-tertiary">
+              Unavailable
+            </span>
+          </div>
         </div>
       </div>
 
@@ -681,7 +860,7 @@ export default function AvailabilityCalendar({
         (() => {
           const now = new Date();
           now.setHours(0, 0, 0, 0);
-          const days = Math.ceil(
+          const daysLeft = Math.ceil(
             (new Date(availabilityDeadline.due_date).getTime() -
               now.getTime()) /
               86400000
@@ -690,10 +869,10 @@ export default function AvailabilityCalendar({
             <p
               className={cn(
                 "font-ui text-xs mt-4",
-                days <= 2 ? "text-terra" : "text-t-tertiary"
+                daysLeft <= 2 ? "text-terra" : "text-t-tertiary"
               )}
             >
-              {days <= 0
+              {daysLeft <= 0
                 ? "⚠ Deadline passed"
                 : `Submit availability by ${new Date(availabilityDeadline.due_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
             </p>

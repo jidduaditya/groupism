@@ -174,8 +174,8 @@ export default function WhatDoYouWantToDoCard({
               className={cn(
                 "rounded-[4px] px-4 py-2 font-ui text-sm transition-colors",
                 selected
-                  ? "border border-accent-amber bg-bg-elevated text-text-primary"
-                  : "border border-[var(--border-mid)] bg-bg-elevated text-text-secondary"
+                  ? "border border-accent-amber bg-elevated text-t-primary"
+                  : "border border-b-mid bg-elevated text-t-secondary"
               )}
             >
               {act.label}
@@ -193,6 +193,7 @@ export default function WhatDoYouWantToDoCard({
           <button
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
+            aria-label={isRecording ? "Stop recording" : "Record voice note"}
             className={cn(
               "flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-ui transition-colors",
               isRecording
@@ -208,7 +209,7 @@ export default function WhatDoYouWantToDoCard({
         </div>
         <textarea
           placeholder='e.g. "Love street food, hate crowds..."'
-          className="w-full min-h-[80px] bg-bg-surface border border-[var(--border-mid)] rounded-[4px] font-ui text-sm text-text-primary p-3 resize-none focus:outline-none focus:border-accent-amber"
+          className="w-full min-h-[80px] bg-surface border border-b-mid rounded-[4px] font-ui text-sm text-t-primary p-3 resize-none focus:outline-none focus:border-accent-amber"
           value={groupNotes}
           onChange={(e) => handleNotesChange(e.target.value)}
         />

@@ -62,7 +62,7 @@ const JoinTrip = () => {
       setTokens(code, { memberToken, memberId: data.member.id });
       navigate(`/trip/${code}`);
     } catch (err: any) {
-      toast({ title: "Failed to join", description: err.message, variant: "destructive" });
+      toast({ title: "Couldn't join this trip", description: err.message || "Check the invite code and try again.", variant: "destructive" });
     } finally {
       setJoining(false);
     }
@@ -73,7 +73,15 @@ const JoinTrip = () => {
       <div className="min-h-screen relative z-10">
         <Header />
         <div className="flex items-center justify-center min-h-screen">
-          <p className="font-ui text-t-secondary">Loading...</p>
+          <div className="space-y-4 w-64">
+            <div className="h-10 bg-surface rounded-[4px] overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
+            </div>
+            <div className="h-4 w-3/4 bg-surface rounded-[4px] overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[rgba(240,234,214,0.06)] to-transparent animate-shimmer" />
+            </div>
+            <p className="font-ui text-sm text-t-tertiary animate-pulse">Finding your trip...</p>
+          </div>
         </div>
       </div>
     );
@@ -135,7 +143,7 @@ const JoinTrip = () => {
               disabled={!displayName.trim() || joining}
               onClick={handleJoin}
             >
-              {joining ? "Joining..." : "Join"}
+              {joining ? "Joining..." : "Join this trip"}
             </Button>
           </div>
         </div>

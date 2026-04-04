@@ -43,8 +43,8 @@ const Home = () => {
       navigate(`/trip/${trip.join_token}`);
     } catch (err: any) {
       toast({
-        title: "Failed to create trip",
-        description: err.message,
+        title: "Couldn't create your trip",
+        description: err.message || "Check your connection and try again.",
         variant: "destructive",
       });
     } finally {
@@ -84,7 +84,7 @@ const Home = () => {
             ].map((c, i) => (
               <div
                 key={c.name}
-                className="w-[140px] rounded-lg bg-surface border border-b-subtle p-3"
+                className="w-[140px] rounded-[4px] bg-surface border border-b-subtle p-3"
                 style={{
                   opacity: 0,
                   animation: `fadeInUp 0.4s ease-out ${i * 80}ms forwards`,
@@ -142,15 +142,17 @@ const Home = () => {
             <div className="flex items-center gap-6">
               <button
                 onClick={() => setGroupSize(Math.max(2, groupSize - 1))}
+                aria-label="Decrease group size"
                 className="text-t-secondary text-2xl font-ui font-light hover:text-t-primary transition-colors h-11 w-11 flex items-center justify-center"
               >
                 −
               </button>
-              <span className="font-mono text-2xl text-accent-amber w-12 text-center">
+              <span className="font-mono text-2xl text-accent-amber w-12 text-center" aria-label={`${groupSize} people`}>
                 {groupSize}
               </span>
               <button
                 onClick={() => setGroupSize(Math.min(20, groupSize + 1))}
+                aria-label="Increase group size"
                 className="text-t-secondary text-2xl font-ui font-light hover:text-t-primary transition-colors h-11 w-11 flex items-center justify-center"
               >
                 +
@@ -160,7 +162,7 @@ const Home = () => {
             <button
               disabled={loading}
               onClick={handleCreate}
-              className="bg-accent-amber text-black font-ui font-medium w-full h-14 rounded-[4px] text-base hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="bg-amber text-t-primary font-display font-bold w-full h-14 rounded-[4px] text-base hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {loading ? "Creating..." : "Create Trip Room →"}
             </button>
@@ -169,13 +171,13 @@ const Home = () => {
           {/* Divider */}
           <div className="flex items-center gap-4 my-8">
             <div className="flex-1 h-px bg-[var(--border-subtle)]"></div>
-            <span className="font-ui text-xs text-text-tertiary uppercase tracking-widest">or</span>
+            <span className="font-ui text-xs text-t-tertiary uppercase tracking-widest">or</span>
             <div className="flex-1 h-px bg-[var(--border-subtle)]"></div>
           </div>
 
           {/* Section 2 — Join */}
           <div className="space-y-3">
-            <label className="font-ui font-light text-sm text-text-secondary">
+            <label className="font-ui font-light text-sm text-t-secondary">
               Already have a code?
             </label>
             <input
@@ -187,9 +189,9 @@ const Home = () => {
             />
             <button
               onClick={() => inviteCode.trim() && navigate(`/join/${inviteCode.trim()}`)}
-              className="border border-[var(--border-strong)] text-text-primary bg-transparent rounded-[4px] h-10 px-5 font-ui text-sm hover:bg-white/5 transition-colors"
+              className="border border-b-mid text-t-primary bg-transparent rounded-[4px] h-10 px-5 font-ui text-sm hover:bg-hover transition-colors"
             >
-              Join →
+              Join trip →
             </button>
           </div>
         </div>

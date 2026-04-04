@@ -34,7 +34,7 @@ function headers(joinToken?: string): Record<string, string> {
 
 async function handleRes(res: Response) {
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw new Error(data.error || "Something went wrong. Check your connection and try again.");
   return data;
 }
 

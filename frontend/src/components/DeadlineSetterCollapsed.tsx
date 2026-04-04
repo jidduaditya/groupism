@@ -45,11 +45,11 @@ export default function DeadlineSetterCollapsed({
         { deadlines: [{ item_type: itemType, due_date: value }] },
         joinToken
       );
-      toast({ title: "Deadline updated" });
+      toast({ title: "Deadline saved" });
       onUpdated();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to update deadline";
-      toast({ title: "Error", description: message, variant: "destructive" });
+      toast({ title: "Couldn't save deadline", description: message, variant: "destructive" });
     }
   }
 

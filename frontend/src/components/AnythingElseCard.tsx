@@ -103,14 +103,15 @@ export default function AnythingElseCard({
 
       <div className="relative">
         <textarea
-          placeholder="Dietary restrictions, special occasions, hard no's, anything the group should know..."
-          className="w-full min-h-[80px] bg-bg-surface border border-[var(--border-mid)] rounded-[4px] font-ui text-sm text-text-primary p-3 pr-12 resize-none focus:outline-none focus:border-accent-amber"
+          placeholder="e.g. Priya is vegetarian, it's Rahul's birthday..."
+          className="w-full min-h-[80px] bg-surface border border-b-mid rounded-[4px] font-ui text-sm text-t-primary p-3 pr-12 resize-none focus:outline-none focus:border-accent-amber"
           value={text}
           onChange={(e) => handleChange(e.target.value)}
         />
         <button
           type="button"
           onClick={isRecording ? stopRecording : startRecording}
+          aria-label={isRecording ? "Stop recording" : "Record voice note"}
           className={cn(
             "absolute right-3 bottom-3 flex items-center justify-center w-8 h-8 rounded-full text-xs transition-colors",
             isRecording
