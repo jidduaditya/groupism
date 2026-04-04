@@ -529,7 +529,7 @@ export default function AvailabilityCalendar({
               }
             }}
             className={cn(
-              "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
+              "h-9 px-3 rounded-[4px] border font-ui text-xs cursor-pointer transition-all duration-150 active:scale-[0.95]",
               rangeMode
                 ? "border border-accent-amber bg-accent-amber text-[var(--bg-base)] font-medium shadow-[0_0_12px_rgba(184,122,8,0.4)]"
                 : "border-b-mid text-t-secondary hover:border-b-strong"
@@ -547,7 +547,7 @@ export default function AvailabilityCalendar({
           <button
             type="button"
             onClick={handleClearAll}
-            className="h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer text-accent-terra border-b-mid hover:border-accent-terra hover:bg-accent-terra/10"
+            className="h-9 px-3 rounded-[4px] border font-ui text-xs cursor-pointer transition-all duration-150 active:scale-[0.95] text-accent-terra border-b-mid hover:border-accent-terra hover:bg-accent-terra/10"
           >
             Clear all my dates
           </button>
