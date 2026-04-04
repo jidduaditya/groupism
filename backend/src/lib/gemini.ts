@@ -329,10 +329,39 @@ Group size: ${params.groupSize} people
 Trip duration: ${params.nights} nights
 ${budgetContext}${prefsContext}${userRequest}
 
-Suggest exactly 3 destination names for this group. Just the names, no explanation.
+STEP 1: Classify the query above.
+- If the query names a specific real destination or place (e.g. "Goa", "Manali", "Pondicherry", "Jaipur"), classify as "specific_destination".
+- If the query is a vague description, vibe, or list of preferences (e.g. "beach + nightlife", "quiet hills for families"), OR if there is no query at all, classify as "vibe_description".
 
-Return ONLY valid JSON, no markdown fences:
-{ "suggestions": ["Destination 1", "Destination 2", "Destination 3"] }`;
+STEP 2: Based on classification, return ONE of these two JSON shapes (no markdown fences):
+
+If specific_destination — return full details for that destination:
+{
+  "destination": {
+    "name": "string",
+    "tagline": "one honest, punchy sentence — not a tourism tagline",
+    "highlights": ["string", "string", "string"],
+    "watch_out": ["string", "string"],
+    "cost_breakdown": {
+      "flights_min": number,
+      "flights_max": number,
+      "hotel_per_night_min": number,
+      "hotel_per_night_max": number,
+      "food_per_day_min": number,
+      "food_per_day_max": number,
+      "activities_min": number,
+      "activities_max": number,
+      "total_min": number,
+      "total_max": number
+    },
+    "nights": ${params.nights}
+  }
+}
+
+If vibe_description — suggest exactly 3 destination names:
+{ "suggestions": ["Destination 1", "Destination 2", "Destination 3"] }
+
+All amounts in INR per person. Return ONLY valid JSON.`;
 
     try {
       const result = await model.generateContent(prompt);

@@ -210,6 +210,13 @@ export default function DestinationSearchCard({
                 className="w-full h-11 pl-10 pr-4 bg-elevated border border-b-mid rounded-[4px] font-ui text-sm text-t-primary placeholder:text-t-tertiary outline-none focus:border-amber transition-colors"
               />
             </div>
+            <button
+              onClick={handleSearch}
+              disabled={!searchValue.trim()}
+              className="h-11 px-5 rounded-[4px] border border-b-mid bg-transparent font-ui text-sm text-t-primary hover:bg-hover transition-all cursor-pointer whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Search
+            </button>
 
             {/* AI suggest */}
             <div className="border-t border-b-subtle pt-4">
