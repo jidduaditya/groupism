@@ -11,6 +11,7 @@ const DINING_STYLES = ['local_cheap', 'mixed', 'restaurants'];
 
 // POST /api/trips/:joinToken/budget/preferences
 router.post('/preferences', loadTrip, requireMember, async (req, res) => {
+  try {
   const trip = (req as any).trip;
   const member = (req as any).member;
   const { accommodation_tier, transport_pref, dining_style, activities, daily_budget_min, daily_budget_max, trip_budget_min, trip_budget_max, notes, activity_categories, activity_details } = req.body;
@@ -76,9 +77,13 @@ router.post('/preferences', loadTrip, requireMember, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: 'Failed to save preferences' });
+  if (error) return res.status(500).json({ error: 'Failed to save preferences', detail: error.message });
 
   res.json({ preference: data });
+  } catch (err: any) {
+    console.error('Budget preferences error:', err);
+    res.status(500).json({ error: 'Failed to save preferences', detail: err.message });
+  }
 });
 
 // POST /api/trips/:joinToken/budget/estimate
@@ -225,14 +230,19 @@ router.post('/analyse', loadTrip, requireMember, async (req, res) => {
 
 // GET /api/trips/:joinToken/budget
 router.get('/', loadTrip, async (req, res) => {
-  const trip = (req as any).trip;
+  try {
+    const trip = (req as any).trip;
 
-  const [{ data: preferences }, { data: estimate }] = await Promise.all([
-    supabase.from('budget_preferences').select('*, trip_members(id, display_name)').eq('trip_id', trip.id),
-    supabase.from('budget_estimates').select('*').eq('trip_id', trip.id).maybeSingle(),
-  ]);
+    const [{ data: preferences }, { data: estimate }] = await Promise.all([
+      supabase.from('budget_preferences').select('*, trip_members(id, display_name)').eq('trip_id', trip.id),
+      supabase.from('budget_estimates').select('*').eq('trip_id', trip.id).maybeSingle(),
+    ]);
 
-  res.json({ preferences: preferences ?? [], estimate: estimate ?? null });
+    res.json({ preferences: preferences ?? [], estimate: estimate ?? null });
+  } catch (err: any) {
+    console.error('Budget fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch budget data', detail: err.message });
+  }
 });
 
 export default router;
