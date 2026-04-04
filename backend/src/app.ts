@@ -10,6 +10,7 @@ import budgetRouter       from './routes/budget';
 import availabilityRouter from './routes/availability';
 import deadlinesRouter    from './routes/deadlines';
 import insightsRouter     from './routes/insights';
+import adminRouter        from './routes/admin';
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use('/api/trips/:joinToken/budget',       budgetRouter);
 app.use('/api/trips/:joinToken/availability', availabilityRouter);
 app.use('/api/trips/:joinToken/deadlines',    deadlinesRouter);
 app.use('/api/trips/:joinToken/insights',    insightsRouter);
+app.use('/api/admin',                        adminRouter);
 
 // ─── 404 fallthrough ─────────────────────────────────────────────────────────
 app.use((_req, res) => {
