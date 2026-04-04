@@ -57,6 +57,50 @@ const Home = () => {
       <Header />
       <div className="min-h-screen flex flex-col justify-center px-6 md:px-16 lg:pl-[12vw] lg:pr-[20vw] pt-24 pb-16">
         <div className="max-w-md">
+          {/* Hero */}
+          <div className="mb-2">
+            <span className="font-display font-black text-4xl sm:text-5xl leading-[1.0] text-t-primary block">
+              every group trip.
+            </span>
+            <span className="font-display font-light text-4xl sm:text-5xl leading-[1.0] text-t-primary block">
+              the same five people.
+            </span>
+          </div>
+
+          <style>{`
+            @keyframes fadeInUp {
+              from { opacity: 0; transform: translateY(12px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
+
+          <div className="flex flex-wrap justify-between gap-3 mt-8">
+            {[
+              { quote: "itinerary v14. sent. again.", name: "the organiser", subtitle: "no thanks received" },
+              { quote: "so flexible! (that's a no)", name: "the vetoer", subtitle: "vetoes everything" },
+              { quote: "wait — what's the plan guys??", name: "the ghost", subtitle: "2hrs before the flight" },
+              { quote: "sent!! (6 days later)", name: "the late one", subtitle: "always the last" },
+              { quote: "best trip ever!! (zero planning)", name: "the passenger", subtitle: "contributed nothing" },
+            ].map((c, i) => (
+              <div
+                key={c.name}
+                className="w-[140px] rounded-lg bg-surface border border-b-subtle p-3"
+                style={{
+                  opacity: 0,
+                  animation: `fadeInUp 0.4s ease-out ${i * 80}ms forwards`,
+                }}
+              >
+                <p className="font-ui text-xs text-t-primary leading-snug mb-2">
+                  "{c.quote}"
+                </p>
+                <p className="font-display text-xs font-bold text-t-primary">{c.name}</p>
+                <p className="font-ui text-[10px] text-t-tertiary">{c.subtitle}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="w-16 h-[1px] bg-accent-amber my-8" />
+
           {/* Section 1 — Create a trip */}
           <h1 className="font-display font-bold text-4xl md:text-3xl text-t-primary mb-8">
             Plan your next group trip

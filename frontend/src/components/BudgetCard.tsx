@@ -92,11 +92,23 @@ export default function BudgetCard({
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
         savedTimerRef.current = setTimeout(() => setSavedVisible(false), 2000);
         onTripUpdated();
+
+        // Auto-trigger AI budget analysis when ≥2 members have submitted
+        const submittedAfterSave = budgetPrefs.filter(
+          (p) => p.trip_budget_min != null && p.trip_budget_max != null
+        ).length;
+        const alreadyCounted = budgetPrefs.some(
+          (p) => p.member_id === currentMemberId && p.trip_budget_min != null
+        );
+        const effectiveCount = alreadyCounted ? submittedAfterSave : submittedAfterSave + 1;
+        if (effectiveCount >= 2) {
+          api.post(`/api/trips/${joinToken}/budget/analyse`, {}, joinToken).catch(() => {});
+        }
       } catch {
         toast({ title: "Failed to save budget", variant: "destructive" });
       }
     },
-    [joinToken, onTripUpdated]
+    [joinToken, onTripUpdated, budgetPrefs, currentMemberId]
   );
 
   useEffect(() => {

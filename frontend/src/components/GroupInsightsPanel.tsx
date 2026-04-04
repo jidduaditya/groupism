@@ -44,6 +44,15 @@ export default function GroupInsightsPanel({
     generate();
   }, [prefsCount, groupInsights]);
 
+  // Re-trigger when insights are stale (new members submitted since last generation)
+  useEffect(() => {
+    if (!groupInsights) return;
+    if (generating) return;
+    if (prefsCount > groupInsights.members_used) {
+      generate();
+    }
+  }, [prefsCount, groupInsights?.members_used]);
+
   const generate = async () => {
     setGenerating(true);
     try {

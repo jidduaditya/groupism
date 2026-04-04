@@ -5,6 +5,15 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 
+interface AIWindow {
+  start_date: string;
+  end_date: string;
+  nights: number;
+  summary: string;
+  stretching_members?: string[];
+  unavailable_members?: string[];
+}
+
 interface AvailabilityCalendarProps {
   joinToken: string;
   trip: {
@@ -19,6 +28,7 @@ interface AvailabilityCalendarProps {
   isOrganiser: boolean;
   onTripUpdated: () => void;
   availabilityDeadline?: { due_date: string; locked: boolean } | null;
+  travelWindows?: { windows: AIWindow[] } | null;
 }
 
 type Tier = "free" | "could_work" | "unavailable";
@@ -181,6 +191,7 @@ export default function AvailabilityCalendar({
   isOrganiser,
   onTripUpdated,
   availabilityDeadline,
+  travelWindows,
 }: AvailabilityCalendarProps) {
   const [localSlots, setLocalSlots] = useState<
     Array<{ member_id: string; slot_date: string; tier: string }>
@@ -313,6 +324,11 @@ export default function AvailabilityCalendar({
           { slot: { date: key, tier: nextTier } },
           joinToken
         );
+
+        // Auto-trigger AI travel windows when ≥2 members submitted (organiser only)
+        if (isOrganiser && submittedMemberIds.size >= 2) {
+          api.post(`/api/trips/${joinToken}/availability/windows`, {}, joinToken).catch(() => {});
+        }
       } catch {
         setLocalSlots(previousSlots);
         toast({
@@ -321,7 +337,7 @@ export default function AvailabilityCalendar({
         });
       }
     },
-    [currentMemberId, localSlots, joinToken]
+    [currentMemberId, localSlots, joinToken, isOrganiser, submittedMemberIds]
   );
 
   const handleDeadlineChange = useCallback(
@@ -526,6 +542,61 @@ export default function AvailabilityCalendar({
           </div>
         )}
       </div>
+
+      {/* AI Suggested Windows */}
+      {travelWindows?.windows && travelWindows.windows.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-b-subtle">
+          <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-3">
+            AI suggested windows
+          </p>
+          <div className="space-y-3">
+            {travelWindows.windows.map((w: AIWindow, i: number) => (
+              <div
+                key={`${w.start_date}-${w.end_date}`}
+                className={cn(
+                  "p-3 rounded-[4px] bg-[rgba(240,234,214,0.03)]",
+                  i === 0 && "border-l-2 border-l-accent-amber"
+                )}
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="font-mono text-sm text-t-primary">
+                    {formatShortDate(w.start_date)} – {formatShortDate(w.end_date)}
+                  </span>
+                  <span className="font-ui text-xs text-t-tertiary">
+                    {w.nights} night{w.nights !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {w.summary && (
+                  <p className="font-ui text-xs text-t-secondary mt-1">{w.summary}</p>
+                )}
+                {w.stretching_members && w.stretching_members.length > 0 && (
+                  <p className="font-ui text-xs text-amber mt-1">
+                    Stretching: {w.stretching_members.join(", ")}
+                  </p>
+                )}
+                {w.unavailable_members && w.unavailable_members.length > 0 && (
+                  <p className="font-ui text-xs text-terra mt-1">
+                    Unavailable: {w.unavailable_members.join(", ")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          {isOrganiser && (
+            <button
+              type="button"
+              onClick={() => {
+                api.post(`/api/trips/${joinToken}/availability/windows`, {}, joinToken)
+                  .then(() => onTripUpdated())
+                  .catch(() => toast({ title: "Failed to refresh windows", variant: "destructive" }));
+              }}
+              className="font-ui text-xs text-t-tertiary hover:text-t-secondary mt-3 cursor-pointer transition-colors"
+            >
+              Refresh
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Legend */}
       <div className="mt-4 pt-4 border-t border-b-subtle">

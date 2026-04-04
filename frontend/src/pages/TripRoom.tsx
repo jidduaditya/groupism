@@ -81,6 +81,7 @@ const TripRoom = () => {
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [budgetEstimate, setBudgetEstimate] = useState<any>(null);
   const [groupInsights, setGroupInsights] = useState<any>(null);
+  const [travelWindows, setTravelWindows] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -101,6 +102,7 @@ const TripRoom = () => {
       setDestinations(data.destinations ?? []);
       setBudgetEstimate(data.budget_estimate ?? null);
       setGroupInsights(data.group_insights ?? null);
+      setTravelWindows(data.travel_windows ?? null);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Trip not found");
@@ -153,6 +155,16 @@ const TripRoom = () => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "availability_slots", filter: `trip_id=eq.${trip.id}` },
+        refetch
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "budget_estimates", filter: `trip_id=eq.${trip.id}` },
+        refetch
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "travel_windows", filter: `trip_id=eq.${trip.id}` },
         refetch
       )
       .on(
@@ -415,6 +427,7 @@ const TripRoom = () => {
             isOrganiser={isOrganiser}
             onTripUpdated={fetchTrip}
             availabilityDeadline={availDeadline}
+            travelWindows={travelWindows}
           />
           <WhatDoYouWantToDoCard
             joinToken={joinToken!}

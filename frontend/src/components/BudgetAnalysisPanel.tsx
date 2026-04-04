@@ -35,16 +35,38 @@ export default function BudgetAnalysisPanel({
   const [error, setError] = useState<string | null>(null);
   const hasFetched = useRef(false);
 
-  // Auto-trigger on first render if no cached analysis
+  const prevCount = useRef(submittedCount);
+
+  // Sync cached analysis from props
   useEffect(() => {
     if (cachedAnalysis) {
       setAnalysis(cachedAnalysis);
-      return;
     }
+  }, [cachedAnalysis]);
+
+  // Auto-trigger on first render if no cached analysis
+  useEffect(() => {
+    if (cachedAnalysis) return;
     if (hasFetched.current) return;
     hasFetched.current = true;
     fetchAnalysis();
   }, [cachedAnalysis]);
+
+  // Re-trigger when new budgets are submitted
+  useEffect(() => {
+    if (submittedCount > prevCount.current) {
+      prevCount.current = submittedCount;
+      hasFetched.current = false;
+      // Re-fetch if we have no cached analysis (the BudgetCard fire-and-forget
+      // will handle it via Realtime, but if cachedAnalysis is null we trigger directly)
+      if (!cachedAnalysis) {
+        hasFetched.current = true;
+        fetchAnalysis();
+      }
+    } else {
+      prevCount.current = submittedCount;
+    }
+  }, [submittedCount, cachedAnalysis]);
 
   async function fetchAnalysis() {
     setLoading(true);
