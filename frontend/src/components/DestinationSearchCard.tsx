@@ -48,7 +48,7 @@ type AddState =
   | { mode: "idle" }
   | { mode: "loading"; loadingText: string }
   | { mode: "suggestions"; suggestions: string[] }
-  | { mode: "preview"; summary: any }
+
   | { mode: "error"; message: string };
 
 export default function DestinationSearchCard({
@@ -101,7 +101,10 @@ export default function DestinationSearchCard({
         setSearchValue("");
         onTripUpdated();
       } else {
-        setAddState({ mode: "preview", summary });
+        setAddState({ mode: "idle" });
+        setSearchValue("");
+        setAiPromptValue("");
+        onTripUpdated();
       }
     } catch {
       setAddState({
@@ -130,7 +133,10 @@ export default function DestinationSearchCard({
           setAddState({ mode: "idle" });
           onTripUpdated();
         } else {
-          setAddState({ mode: "preview", summary });
+          setAddState({ mode: "idle" });
+        setSearchValue("");
+        setAiPromptValue("");
+        onTripUpdated();
         }
       }
     } catch {
@@ -156,7 +162,10 @@ export default function DestinationSearchCard({
         setAddState({ mode: "idle" });
         onTripUpdated();
       } else {
-        setAddState({ mode: "preview", summary });
+        setAddState({ mode: "idle" });
+        setSearchValue("");
+        setAiPromptValue("");
+        onTripUpdated();
       }
     } catch {
       setAddState({
@@ -164,15 +173,6 @@ export default function DestinationSearchCard({
         message: "Suggestions aren't available right now. Try again in a moment.",
       });
     }
-  }
-
-  function handleAddedToList() {
-    // The destination was auto-saved by the backend during the summary call
-    setAddState({ mode: "idle" });
-    setSearchValue("");
-    setAiPromptValue("");
-    onTripUpdated();
-    toast({ title: "Added — your group can now vote on it" });
   }
 
   function handleReset() {
@@ -258,49 +258,6 @@ export default function DestinationSearchCard({
               className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
             >
               ← Back to search
-            </button>
-          </div>
-        )}
-
-        {addState.mode === "preview" && (
-          <div className="space-y-4">
-            <button
-              onClick={handleReset}
-              className="font-ui text-sm text-t-tertiary hover:text-t-secondary cursor-pointer transition-colors"
-            >
-              ← Back to search
-            </button>
-            {/* Compact preview */}
-            <div className="border border-b-mid rounded-[4px] p-4">
-              <h3 className="font-display text-xl font-bold text-t-primary">
-                {addState.summary.name}
-              </h3>
-              {addState.summary.tagline && (
-                <p className="font-ui font-light text-sm text-t-secondary mt-1">
-                  {addState.summary.tagline}
-                </p>
-              )}
-              {addState.summary.cost_breakdown && (
-                <p className="font-mono text-xs text-t-tertiary mt-2">
-                  Est.{" "}
-                  {formatRange(
-                    addState.summary.cost_breakdown.total_min,
-                    addState.summary.cost_breakdown.total_max
-                  )}{" "}
-                  pp
-                  {addState.summary.nights
-                    ? `  ·  ${addState.summary.nights} nights`
-                    : ""}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={handleAddedToList}
-              className={cn(
-                "w-full h-12 bg-amber text-t-primary font-display font-bold text-base rounded-[4px] cursor-pointer hover:opacity-90 transition-opacity"
-              )}
-            >
-              Add {addState.summary.name || "destination"} to group list →
             </button>
           </div>
         )}
