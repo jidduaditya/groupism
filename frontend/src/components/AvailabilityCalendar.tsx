@@ -531,7 +531,7 @@ export default function AvailabilityCalendar({
             className={cn(
               "h-9 px-3 rounded-[4px] border font-ui text-xs transition-all cursor-pointer",
               rangeMode
-                ? "border-accent-amber bg-accent-amber/10 text-accent-amber font-medium"
+                ? "border-accent-amber text-accent-amber font-medium"
                 : "border-b-mid text-t-secondary hover:border-b-strong"
             )}
           >
