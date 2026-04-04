@@ -41,32 +41,18 @@ export default function TripSummaryCard({
   destinations,
   budgetPrefs,
   groupInsights,
-  members,
 }: TripSummaryCardProps) {
   // Destination section
   const selectedDest = trip.selected_destination_id
     ? destinations.find((d) => d.id === trip.selected_destination_id)
     : null;
 
-  const leadingDest =
-    !selectedDest && destinations.length > 0
-      ? [...destinations].sort((a, b) => b.votes - a.votes)[0]
-      : null;
-
-  const destName = selectedDest?.name ?? leadingDest?.name ?? null;
-  const destNights = selectedDest?.nights ?? leadingDest?.nights ?? null;
-  const destCostMin =
-    selectedDest?.estimated_cost_min ?? leadingDest?.estimated_cost_min ?? null;
-  const destCostMax =
-    selectedDest?.estimated_cost_max ?? leadingDest?.estimated_cost_max ?? null;
-  const destVotes = selectedDest?.votes ?? leadingDest?.votes ?? 0;
-
   // Budget section
   const submitted = budgetPrefs.filter(
     (p) => p.trip_budget_min != null && p.trip_budget_max != null
   );
   const avgMin =
-    submitted.length >= 2
+    submitted.length >= 1
       ? Math.round(
           submitted.reduce((s, p) => s + p.trip_budget_min!, 0) /
             submitted.length /
@@ -74,20 +60,12 @@ export default function TripSummaryCard({
         ) * 500
       : null;
   const avgMax =
-    submitted.length >= 2
+    submitted.length >= 1
       ? Math.round(
           submitted.reduce((s, p) => s + p.trip_budget_max!, 0) /
             submitted.length /
             500
         ) * 500
-      : null;
-  const fullMin =
-    submitted.length > 0
-      ? Math.min(...submitted.map((p) => p.trip_budget_min!))
-      : null;
-  const fullMax =
-    submitted.length > 0
-      ? Math.max(...submitted.map((p) => p.trip_budget_max!))
       : null;
 
   // Activity categories — most popular
@@ -107,7 +85,7 @@ export default function TripSummaryCard({
     : null;
 
   // If nothing to show, don't render
-  const hasDest = !!destName;
+  const hasDest = selectedDest || destinations.length > 0;
   const hasBudget = avgMin !== null;
   const hasActivities = topCats.length > 0 || !!vibeSnippet;
   if (!hasDest && !hasBudget && !hasActivities) return null;
@@ -120,28 +98,30 @@ export default function TripSummaryCard({
           <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-1">
             Destination
           </p>
-          {destName ? (
+          {selectedDest ? (
             <>
-              <p className="font-display text-lg font-bold text-t-primary leading-tight">
-                {destName}
-                {!selectedDest && leadingDest && (
-                  <span className="font-ui text-xs text-t-tertiary font-normal ml-1.5">
-                    (leading)
-                  </span>
-                )}
+              <p className="font-display text-xl text-text-primary">
+                {selectedDest.name}
               </p>
-              <p className="font-mono text-xs text-t-secondary mt-0.5">
-                {destNights ? `${destNights}N` : ""}
-                {destCostMin && destCostMax
-                  ? `${destNights ? " · " : ""}${formatBudget(destCostMin)}–${formatBudget(destCostMax)}`
-                  : ""}
-                {destVotes > 0
-                  ? ` · ${destVotes} vote${destVotes > 1 ? "s" : ""}`
-                  : ""}
+              {selectedDest.nights && trip.travel_from && trip.travel_to && (
+                <p className="font-mono text-xs text-text-tertiary mt-0.5">
+                  {selectedDest.nights}N
+                </p>
+              )}
+            </>
+          ) : destinations.length > 0 ? (
+            <>
+              <p className="font-display text-base italic text-text-secondary">
+                {destinations.map((d) => d.name).join(", ")}
+              </p>
+              <p className="font-ui text-xs text-accent-amber mt-0.5">
+                Voting in progress
               </p>
             </>
           ) : (
-            <p className="font-mono text-sm text-t-tertiary">—</p>
+            <p className="font-ui text-xs text-text-tertiary">
+              No suggestions yet
+            </p>
           )}
         </div>
 
@@ -152,21 +132,17 @@ export default function TripSummaryCard({
           </p>
           {avgMin !== null && avgMax !== null ? (
             <>
-              <p className="font-mono text-lg font-medium text-t-primary leading-tight">
-                {formatBudget(avgMin)} – {formatBudget(avgMax)}
+              <p className="font-mono text-lg text-text-primary leading-tight">
+                {formatBudget(avgMin)} – {formatBudget(avgMax)} avg
               </p>
-              <p className="font-mono text-xs text-t-secondary mt-0.5">
-                avg of {submitted.length}/{members.length}
-                {fullMin !== null && fullMax !== null
-                  ? ` · range ${formatBudget(fullMin)}–${formatBudget(fullMax)}`
-                  : ""}
+              <p className="font-ui text-xs text-text-tertiary mt-0.5">
+                Based on {submitted.length}{" "}
+                {submitted.length === 1 ? "person" : "people"}
               </p>
             </>
           ) : (
             <p className="font-mono text-sm text-t-tertiary">
-              {submitted.length > 0
-                ? `${submitted.length} submitted`
-                : "No budgets yet"}
+              No budgets yet
             </p>
           )}
         </div>

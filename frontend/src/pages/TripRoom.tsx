@@ -6,7 +6,8 @@ import DeadlineSetterCollapsed from "@/components/DeadlineSetterCollapsed";
 import DestinationSearchCard from "@/components/DestinationSearchCard";
 import BudgetCard from "@/components/BudgetCard";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
-import PersonalPreferencesCard from "@/components/PersonalPreferencesCard";
+import WhatDoYouWantToDoCard from "@/components/WhatDoYouWantToDoCard";
+import AnythingElseCard from "@/components/AnythingElseCard";
 import GroupInsightsPanel from "@/components/GroupInsightsPanel";
 import TripSummaryCard from "@/components/TripSummaryCard";
 import { api, getTokens } from "@/lib/api";
@@ -55,6 +56,8 @@ interface TripData {
   group_size: number;
   selected_destination_id: string | null;
   destination_summary: any | null;
+  group_activity_notes?: string | null;
+  group_anything_else?: string | null;
 }
 
 function formatCost(min: number | null, max: number | null): string {
@@ -188,9 +191,10 @@ const TripRoom = () => {
     }
   };
 
-  const handleCopyInvite = () => {
-    const link = `${window.location.origin}/join/${joinToken}`;
-    navigator.clipboard.writeText(link);
+  const handleCopyInvite = async () => {
+    const url = `${window.location.origin}/join/${joinToken}`;
+    const text = `Link: ${url}\nCode: ${joinToken}`;
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -232,7 +236,6 @@ const TripRoom = () => {
       );
       await fetchTrip();
     } catch (err: any) {
-      // Rollback — refetch
       await fetchTrip();
       toast({ title: "Vote failed", description: err.message, variant: "destructive" });
     }
@@ -284,7 +287,7 @@ const TripRoom = () => {
     return (
       <div className="min-h-screen relative z-10">
         <Header />
-        <div className="max-w-2xl mx-auto px-6 pt-24">
+        <div className="max-w-3xl mx-auto px-4 pt-24">
           <p className="font-ui text-t-secondary">Loading trip...</p>
         </div>
       </div>
@@ -296,7 +299,7 @@ const TripRoom = () => {
     return (
       <div className="min-h-screen relative z-10">
         <Header />
-        <div className="max-w-2xl mx-auto px-6 pt-24">
+        <div className="max-w-3xl mx-auto px-4 pt-24">
           <h1 className="font-display text-[32px] font-bold text-t-primary mb-2">Trip not found</h1>
           <p className="font-ui text-t-secondary">{error}</p>
         </div>
@@ -307,7 +310,6 @@ const TripRoom = () => {
   // Derived state
   const myMember = members.find((m) => m.id === currentMemberId);
   const hasConfirmed = myMember?.has_confirmed || false;
-
 
   const myPrefs = budgetPrefs.find((p: any) => p.member_id === currentMemberId) ?? null;
 
@@ -329,9 +331,9 @@ const TripRoom = () => {
   return (
     <div className="min-h-screen relative z-10">
       <Header />
-      <div className="max-w-2xl mx-auto px-6 pt-24 pb-32">
+      <div className="max-w-3xl mx-auto px-4 pt-24 pb-32 space-y-4">
         {/* Trip header */}
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-6">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="font-display text-[32px] md:text-[36px] font-bold leading-[1.05] text-t-primary">
               {trip.name}
@@ -346,7 +348,7 @@ const TripRoom = () => {
             onClick={handleCopyInvite}
             className="mt-4 md:mt-0 h-9 px-4 rounded-[4px] border border-b-mid font-ui text-sm text-t-secondary hover:bg-hover transition-all"
           >
-            {copied ? "Copied!" : "Share link"}
+            {copied ? "Copied!" : "Share invite"}
           </button>
         </div>
 
@@ -359,28 +361,24 @@ const TripRoom = () => {
 
         {/* Deadline setter — organiser only */}
         {isOrganiser && (
-          <div className="mt-4">
-            <DeadlineSetterCollapsed
-              joinToken={joinToken!}
-              deadlines={deadlines}
-              onUpdated={fetchTrip}
-            />
-          </div>
+          <DeadlineSetterCollapsed
+            joinToken={joinToken!}
+            deadlines={deadlines}
+            onUpdated={fetchTrip}
+          />
         )}
 
         {/* Summary card */}
-        <div className="mt-6">
-          <TripSummaryCard
-            trip={trip}
-            destinations={destinations}
-            budgetPrefs={budgetPrefs}
-            groupInsights={groupInsights}
-            members={members}
-          />
-        </div>
+        <TripSummaryCard
+          trip={trip}
+          destinations={destinations}
+          budgetPrefs={budgetPrefs}
+          groupInsights={groupInsights}
+          members={members}
+        />
 
-        {/* Card 1 — Destination */}
-        <div className="mt-8">
+        {/* Row 1: Destination + Budget */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <DestinationSearchCard
             joinToken={joinToken!}
             trip={trip}
@@ -394,10 +392,6 @@ const TripRoom = () => {
             onDeselect={handleDeselectDestination}
             deadline={destDeadline}
           />
-        </div>
-
-        {/* Card 2 — Budget */}
-        <div className="mt-6">
           <BudgetCard
             joinToken={joinToken!}
             budgetPrefs={budgetPrefs}
@@ -406,11 +400,12 @@ const TripRoom = () => {
             onTripUpdated={fetchTrip}
             deadline={budgetDeadline}
             cachedAnalysis={budgetEstimate?.breakdown ?? null}
+            trip={trip}
           />
         </div>
 
-        {/* Card 3 — Availability */}
-        <div className="mt-6">
+        {/* Row 2: Calendar + What do you want to do */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <AvailabilityCalendar
             joinToken={joinToken!}
             trip={trip}
@@ -421,30 +416,33 @@ const TripRoom = () => {
             onTripUpdated={fetchTrip}
             availabilityDeadline={availDeadline}
           />
-        </div>
-
-        {/* Card 4 — Personal Preferences */}
-        <div className="mt-6">
-          <PersonalPreferencesCard
+          <WhatDoYouWantToDoCard
             joinToken={joinToken!}
+            trip={trip}
             existingPrefs={myPrefs}
             onRefresh={fetchTrip}
           />
         </div>
+
+        {/* Full width: Anything else */}
+        <AnythingElseCard
+          joinToken={joinToken!}
+          trip={trip}
+          onRefresh={fetchTrip}
+        />
+
         {/* Group Insights */}
-        <div className="mt-6">
-          <GroupInsightsPanel
-            joinToken={joinToken!}
-            groupInsights={groupInsights}
-            prefsCount={budgetPrefs.length}
-            onRefresh={fetchTrip}
-          />
-        </div>
+        <GroupInsightsPanel
+          joinToken={joinToken!}
+          groupInsights={groupInsights}
+          prefsCount={budgetPrefs.length}
+          onRefresh={fetchTrip}
+        />
       </div>
 
       {/* Sticky "I'm in" button */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--bg-base)]/90 backdrop-blur-sm border-t border-b-subtle z-20">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           {!hasConfirmed ? (
             <button
               onClick={handleConfirm}

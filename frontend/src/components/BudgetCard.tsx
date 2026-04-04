@@ -19,6 +19,10 @@ interface BudgetCardProps {
   onTripUpdated: () => void;
   deadline?: { due_date: string; locked: boolean } | null;
   cachedAnalysis?: any | null;
+  trip: {
+    selected_destination_id: string | null;
+    destination_summary: any | null;
+  };
 }
 
 const BUDGET_OPTIONS = [
@@ -34,6 +38,10 @@ const BUDGET_OPTIONS = [
   { label: "₹30,000+", value: 30000 },
 ];
 
+function formatINR(val: number): string {
+  return val.toLocaleString("en-IN");
+}
+
 export default function BudgetCard({
   joinToken,
   budgetPrefs,
@@ -42,8 +50,8 @@ export default function BudgetCard({
   onTripUpdated,
   deadline,
   cachedAnalysis,
+  trip,
 }: BudgetCardProps) {
-  // Find current member's existing budget
   const myPref = budgetPrefs.find((p) => p.member_id === currentMemberId);
 
   const [budgetMin, setBudgetMin] = useState<number | null>(
@@ -115,14 +123,36 @@ export default function BudgetCard({
     };
   }, []);
 
-  // Build group overview data
-  const prefsByMember = new Map(
-    budgetPrefs.map((p) => [p.member_id, p])
+  // Average calculation (n≥1)
+  const submitted = budgetPrefs.filter(
+    (p) => p.trip_budget_min != null && p.trip_budget_max != null
   );
+  const avgMin =
+    submitted.length >= 1
+      ? Math.round(
+          submitted.reduce((s, p) => s + p.trip_budget_min!, 0) /
+            submitted.length /
+            500
+        ) * 500
+      : null;
+  const avgMax =
+    submitted.length >= 1
+      ? Math.round(
+          submitted.reduce((s, p) => s + p.trip_budget_max!, 0) /
+            submitted.length /
+            500
+        ) * 500
+      : null;
 
-  function formatBudget(val: number): string {
-    return `₹${val.toLocaleString("en-IN")}`;
-  }
+  // Budget mismatch warning
+  const destCostMin = trip.destination_summary?.cost_breakdown?.total_min ?? null;
+  const destCostMax = trip.destination_summary?.cost_breakdown?.total_max ?? null;
+  const destName = trip.destination_summary?.name ?? "This destination";
+  const showMismatch =
+    budgetMax !== null &&
+    trip.selected_destination_id !== null &&
+    destCostMin !== null &&
+    destCostMin > budgetMax;
 
   function daysUntilDeadline(dueDate: string): number {
     const now = new Date();
@@ -133,7 +163,7 @@ export default function BudgetCard({
   }
 
   return (
-    <div className="rounded-[4px] border border-b-mid bg-surface p-6">
+    <div className="rounded-[4px] border border-b-mid bg-surface p-6 min-h-[280px]">
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-display text-2xl font-bold text-t-primary">
           What&apos;s your budget for this trip?
@@ -143,12 +173,12 @@ export default function BudgetCard({
         )}
       </div>
       <p className="font-ui font-light text-sm text-t-secondary mb-6">
-        Set your per-person budget range. This helps the group find destinations everyone can afford.
+        Set your per-person budget range.
       </p>
 
       {/* My budget inputs */}
       <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-2">
-        My total budget per person
+        My budget
       </p>
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -196,74 +226,30 @@ export default function BudgetCard({
         <p className="font-ui text-sm text-terra mt-3">{validationError}</p>
       )}
 
-      {/* Group budget overview */}
-      <div className="mt-6 border-t border-b-subtle pt-4">
-        <p className="font-ui text-xs text-t-tertiary uppercase tracking-wider mb-3">
-          Group budget overview
-        </p>
-        <div className="space-y-2">
-          {members.map((m) => {
-            const pref = prefsByMember.get(m.id);
-            const hasMin = pref?.trip_budget_min != null;
-            const hasMax = pref?.trip_budget_max != null;
-            const isMe = m.id === currentMemberId;
-
-            return (
-              <div
-                key={m.id}
-                className={cn(
-                  "flex justify-between items-center py-1 px-2 rounded-[2px]",
-                  isMe && "border-l-2 border-l-amber"
-                )}
-              >
-                <span className="font-ui text-sm text-t-secondary">
-                  {m.display_name}
-                </span>
-                <span
-                  className={cn(
-                    "font-mono text-sm",
-                    hasMin || hasMax ? "text-t-primary" : "text-t-tertiary"
-                  )}
-                >
-                  {hasMin && hasMax
-                    ? `${formatBudget(pref!.trip_budget_min!)} – ${formatBudget(pref!.trip_budget_max!)}`
-                    : "—"}
-                </span>
-              </div>
-            );
-          })}
-
-          {/* Group average row */}
-          {(() => {
-            const submitted = budgetPrefs.filter(
-              (p) => p.trip_budget_min != null && p.trip_budget_max != null
-            );
-            if (submitted.length < 2) return null;
-            const avgMin =
-              Math.round(
-                submitted.reduce((s, p) => s + p.trip_budget_min!, 0) /
-                  submitted.length /
-                  500
-              ) * 500;
-            const avgMax =
-              Math.round(
-                submitted.reduce((s, p) => s + p.trip_budget_max!, 0) /
-                  submitted.length /
-                  500
-              ) * 500;
-            return (
-              <div className="border-t border-b-subtle pt-2 mt-2 flex justify-between items-center py-1 px-2">
-                <span className="font-ui text-xs text-t-tertiary uppercase tracking-widest">
-                  Group average
-                </span>
-                <span className="font-mono text-sm text-t-primary font-medium">
-                  {formatBudget(avgMin)} – {formatBudget(avgMax)}
-                </span>
-              </div>
-            );
-          })()}
+      {/* Average + count */}
+      {avgMin !== null && avgMax !== null && (
+        <div className="mt-6 border-t border-b-subtle pt-4">
+          <p className="font-mono text-xl text-text-primary">
+            ₹{formatINR(avgMin)} – ₹{formatINR(avgMax)}
+          </p>
+          <p className="font-ui text-xs text-text-tertiary mt-0.5">
+            Based on {submitted.length}{" "}
+            {submitted.length === 1 ? "person" : "people"}
+          </p>
         </div>
-      </div>
+      )}
+
+      {/* Budget mismatch warning */}
+      {showMismatch && (
+        <div className="mt-3 p-3 border border-accent-terra rounded-[4px] bg-[rgba(196,97,74,0.08)]">
+          <p className="font-ui text-xs text-accent-terra leading-relaxed">
+            ⚠ {destName} is estimated at ₹{formatINR(destCostMin)}
+            {destCostMax ? ` – ₹${formatINR(destCostMax)}` : ""} pp. Your
+            budget of ₹{formatINR(budgetMax!)} may not cover it. Consider
+            adjusting your budget or the group choosing a different destination.
+          </p>
+        </div>
+      )}
 
       {/* AI Budget Analysis — shown when ≥2 members have submitted */}
       {budgetPrefs.filter((p) => p.trip_budget_min != null).length >= 2 && (

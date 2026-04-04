@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { supabase } from '../lib/supabase';
 import { generateOrganiserToken, generateMemberToken, generateJoinToken } from '../lib/tokens';
-import { loadTrip, requireOrganiser } from '../middleware/tokens';
+import { loadTrip, requireOrganiser, requireMember } from '../middleware/tokens';
 
 const router = Router();
 
@@ -138,6 +138,32 @@ router.patch('/:joinToken', loadTrip, requireOrganiser, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: 'Failed to update trip' });
+
+  const { organiser_token: _omit, ...safeTrip } = data;
+  res.json({ trip: safeTrip });
+});
+
+// PATCH /api/trips/:joinToken/notes — any member can update shared group notes
+router.patch('/:joinToken/notes', loadTrip, requireMember, async (req, res) => {
+  const trip = (req as any).trip;
+  const { group_activity_notes, group_anything_else } = req.body;
+
+  const updates: Record<string, any> = {};
+  if (group_activity_notes !== undefined) updates.group_activity_notes = group_activity_notes;
+  if (group_anything_else  !== undefined) updates.group_anything_else  = group_anything_else;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  const { data, error } = await supabase
+    .from('trips')
+    .update(updates)
+    .eq('id', trip.id)
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: 'Failed to update notes' });
 
   const { organiser_token: _omit, ...safeTrip } = data;
   res.json({ trip: safeTrip });
